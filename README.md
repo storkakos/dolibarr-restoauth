@@ -43,10 +43,18 @@ have to be created or copied, and **no Dolibarr core code is changed**.
 
 ## Install
 
-Copy the repository content (this folder) to `htdocs/custom/restoauth`, so that
-`htdocs/custom/restoauth/core/modules/modRestOAuth.class.php` exists. Release ZIPs for Dolibarr's
-module upload (Setup → Modules → Deploy/install external module) are attached to the tagged
-releases.
+**From the release ZIP (recommended).** Download `module_restoauth-X.Y.Z.zip` from the tagged
+release (or build it yourself, see [Development](#development)). In Dolibarr go to Setup → Modules
+→ Deploy/install external module, upload the ZIP and install it. Dolibarr unpacks it to
+`htdocs/custom/restoauth`. Then continue with [Configure Dolibarr](#configure-dolibarr). Module
+upload must be allowed in Dolibarr (no `installmodules.lock` in the documents folder).
+
+**From a checkout.** Check out a release tag and copy the repository content (this folder) to
+`htdocs/custom/restoauth`, so that `htdocs/custom/restoauth/core/modules/modRestOAuth.class.php`
+exists.
+
+What changed between versions: [CHANGELOG.md](CHANGELOG.md). To update, install the newer ZIP the
+same way (Dolibarr replaces the module folder); to roll back, install the older ZIP.
 
 ## Configure Dolibarr
 
@@ -211,6 +219,19 @@ Lint every PHP file (`php -l`); the script uses a local `php` or, if there is no
 ```sh
 bash scripts/lint-php.sh
 ```
+
+Build the release ZIP from a tag. The script checks that the tag `vX.Y.Z` matches
+`$this->version` in `core/modules/modRestOAuth.class.php` and writes
+`dist/module_restoauth-X.Y.Z.zip` with `git archive`, so only committed files of that tag go in and
+the same tag always gives the same ZIP. Repo-only files (`AGENTS.md`, `docs/`, `scripts/`) are left
+out via `export-ignore` in `.gitattributes`.
+
+```sh
+bash scripts/build-release-zip.sh v0.1.0
+```
+
+Release steps: set the new version in the module descriptor, add a `CHANGELOG.md` entry, commit,
+tag `vX.Y.Z`, build the ZIP and attach it to the GitHub release.
 
 The module is tested end to end in the test stack of dolibarr-mcp-server (Dolibarr 23, Keycloak,
 LibreChat). There are no PHPUnit tests yet.
