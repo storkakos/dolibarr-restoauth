@@ -147,22 +147,26 @@ function restoauth_signing_key()
 }
 
 /**
- * Configurable lifetimes in seconds: constant => array(default, minimum, maximum).
- * The setup page refuses values outside these bounds.
+ * Configurable lifetimes: constant => array(default, minimum, maximum), in the unit of the setting
+ * (seconds for *_LIFETIME, days for *_DAYS). The setup page refuses values outside these bounds;
+ * restoauth_lifetime() clamps to them at runtime.
  *
  * @return array<string,array{0:int,1:int,2:int}>
  */
 function restoauth_lifetime_bounds()
 {
 	return array(
+		'RESTOAUTH_ACCESS_TOKEN_LIFETIME' => array(3600, 60, 86400),
 		'RESTOAUTH_CODE_LIFETIME' => array(120, 30, 600),
 		'RESTOAUTH_CONSENT_REQUEST_LIFETIME' => array(900, 60, 3600),
+		'RESTOAUTH_REFRESH_IDLE_DAYS' => array(30, 1, 365),
+		'RESTOAUTH_REFRESH_MAX_DAYS' => array(90, 1, 365),
 	);
 }
 
 /**
- * Effective lifetime in seconds: the configured value, the default if unset or not a number,
- * clamped to the bounds (in case the constant was edited outside the setup page).
+ * Effective lifetime in the unit of the setting: the configured value, the default if unset or not
+ * a number, clamped to the bounds (in case the constant was edited outside the setup page).
  *
  * @param string $name Constant from restoauth_lifetime_bounds()
  * @return int
@@ -392,9 +396,9 @@ function restoauth_load_user($db, $userId)
 function restoauth_issue_tokens($db, $client, $u, $resource, $scope, $familyId = null, $familyDatec = null)
 {
 	$now = dol_now();
-	$lifetime = max(60, getDolGlobalInt('RESTOAUTH_ACCESS_TOKEN_LIFETIME', 3600));
-	$idleDays = max(1, getDolGlobalInt('RESTOAUTH_REFRESH_IDLE_DAYS', 30));
-	$maxDays = max($idleDays, getDolGlobalInt('RESTOAUTH_REFRESH_MAX_DAYS', 90));
+	$lifetime = restoauth_lifetime('RESTOAUTH_ACCESS_TOKEN_LIFETIME');
+	$idleDays = restoauth_lifetime('RESTOAUTH_REFRESH_IDLE_DAYS');
+	$maxDays = max($idleDays, restoauth_lifetime('RESTOAUTH_REFRESH_MAX_DAYS'));	// fallback if set outside the setup page
 	if ($familyId === null) {
 		$familyId = bin2hex(random_bytes(16));
 		$familyDatec = $now;

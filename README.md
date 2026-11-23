@@ -152,22 +152,24 @@ files of Dolibarr 23.0.3.
 
 | Setting | Default | Configurable |
 | --- | --- | --- |
-| Access token | 3600 s | yes (`RESTOAUTH_ACCESS_TOKEN_LIFETIME`, at least 60 s) |
+| Access token | 3600 s | yes (`RESTOAUTH_ACCESS_TOKEN_LIFETIME`, 60 to 86400 s) |
 | Authorization code (single use) | 120 s | yes (`RESTOAUTH_CODE_LIFETIME`, 30 to 600 s) |
 | Signed authorization request (authorize → login and consent) | 900 s (15 min) | yes (`RESTOAUTH_CONSENT_REQUEST_LIFETIME`, 60 to 3600 s) |
-| Connection without use (refresh token idle) | 30 days | yes (`RESTOAUTH_REFRESH_IDLE_DAYS`) |
-| Connection at most (refresh token family) | 90 days | yes (`RESTOAUTH_REFRESH_MAX_DAYS`, at least the idle value) |
+| Connection without use (refresh token idle) | 30 days | yes (`RESTOAUTH_REFRESH_IDLE_DAYS`, 1 to 365 days) |
+| Connection at most (refresh token family) | 90 days | yes (`RESTOAUTH_REFRESH_MAX_DAYS`, 1 to 365 days, at least the idle value) |
 
-All values are set on the module's setup page. For the code and the consent request lifetimes the
-page shows the allowed range and refuses the whole save if a value is not a whole number inside it;
-the rule of thumb from RFC 6749 is a code lifetime of at most 10 minutes. The consent request
-lifetime is the time a user has from the client's authorize request until they click **Allow**,
-including the Dolibarr or Keycloak login.
+All values are set on the module's setup page. The page shows the allowed range of each value and
+refuses the whole save if a value is not a whole number inside its range, or if the idle days are
+greater than the maximum days; the entered values stay in the form. The rule of thumb from RFC 6749
+is a code lifetime of at most 10 minutes. The consent request lifetime is the time a user has from
+the client's authorize request until they click **Allow**, including the Dolibarr or Keycloak login.
 
-A changed lifetime applies to codes and requests created after the change: the expiry is fixed when
-the code or the request is created. If a constant is missing (for example after updating from
-0.1.0 without reactivating the module) the default applies; a value set outside the setup page is
-clamped to the allowed range.
+A changed lifetime applies to codes, requests and tokens issued after the change: the expiry is
+fixed when they are issued. Refresh tokens of existing connections get the new idle and maximum
+days at their next refresh. If a constant is missing (for example after updating from 0.1.0 without
+reactivating the module) or is not a whole number, the default applies; a value set outside the
+setup page is clamped to the allowed range, and a maximum below the idle days counts as the idle
+days.
 
 ## How the REST API accepts the token (Dolibarr 23)
 
@@ -237,7 +239,7 @@ the same tag always gives the same ZIP. Repo-only files (`AGENTS.md`, `docs/`, `
 out via `export-ignore` in `.gitattributes`.
 
 ```sh
-bash scripts/build-release-zip.sh v0.2.0
+bash scripts/build-release-zip.sh v0.2.1
 ```
 
 Release steps: set the new version in the module descriptor, add a `CHANGELOG.md` entry, commit,
