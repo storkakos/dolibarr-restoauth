@@ -54,7 +54,9 @@ rm -f "$ZIP"
 git archive --format=zip --prefix=restoauth/ -o "$ZIP" "$TAG"
 
 # Sanity check: the descriptor must sit where Dolibarr looks for it.
-if ! git archive --format=tar --prefix=restoauth/ "$TAG" | tar -tf - | grep -qx "restoauth/$DESCRIPTOR"; then
+# (List first, then grep: `grep -q` in the pipe would end it early and trip pipefail.)
+LISTING="$(git archive --format=tar --prefix=restoauth/ "$TAG" | tar -tf -)"
+if ! grep -qx "restoauth/$DESCRIPTOR" <<<"$LISTING"; then
   echo "build-release-zip: restoauth/$DESCRIPTOR missing from the archive" >&2
   rm -f "$ZIP"
   exit 1
