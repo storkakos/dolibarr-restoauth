@@ -4,6 +4,18 @@ All notable changes to restoauth are listed here. Versions follow [Semantic Vers
 each release is a git tag `vX.Y.Z` with the ZIP `module_restoauth-X.Y.Z.zip` for Dolibarr's module
 upload.
 
+## 0.2.0 - 2026-11-23
+
+- The authorization code lifetime (`RESTOAUTH_CODE_LIFETIME`, default 120 s, 30 to 600 s) and the
+  lifetime of the signed authorize-to-consent request (`RESTOAUTH_CONSENT_REQUEST_LIFETIME`, default
+  900 s, 60 to 3600 s) can be set on the setup page. Both were fixed before; the defaults keep the
+  old behaviour.
+- The setup page refuses the whole save, with an error naming the setting and its range, if one of
+  these values is not a whole number inside its range.
+- Upgrading from 0.1.0: install the ZIP over the old version. Clients, connections and settings are
+  kept. Until the module is deactivated and activated again the two new constants do not exist and
+  the defaults apply; saving the setup page once also creates them.
+
 ## 0.1.0 - 2026-11-23
 
 First release.

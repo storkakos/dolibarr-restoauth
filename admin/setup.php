@@ -23,6 +23,8 @@ if (!$user->admin) {
 $action = GETPOST('action', 'aZ09');
 $settings = array(
 	'RESTOAUTH_ACCESS_TOKEN_LIFETIME' => array('RestOAuthAccessLifetime', 'int'),
+	'RESTOAUTH_CODE_LIFETIME' => array('RestOAuthCodeLifetime', 'lifetime'),
+	'RESTOAUTH_CONSENT_REQUEST_LIFETIME' => array('RestOAuthConsentRequestLifetime', 'lifetime'),
 	'RESTOAUTH_REFRESH_IDLE_DAYS' => array('RestOAuthIdleDays', 'int'),
 	'RESTOAUTH_REFRESH_MAX_DAYS' => array('RestOAuthMaxDays', 'int'),
 	'RESTOAUTH_ALLOW_LOOPBACK' => array('RestOAuthAllowLoopback', 'yesno'),
@@ -31,17 +33,40 @@ $settings = array(
 	'RESTOAUTH_ISSUER' => array('RestOAuthIssuer', 'string'),
 );
 
+$lifetimeBounds = restoauth_lifetime_bounds();
+$posted = array();	// values of a refused save, shown again in the form
 if ($action === 'update') {
+	// Validate the lifetimes first; one invalid value refuses the whole save
+	$errors = array();
 	foreach ($settings as $name => $def) {
-		$val = GETPOST($name, $def[1] === 'int' ? 'int' : 'restricthtml');
-		if ($def[1] === 'yesno') {
-			$val = GETPOST($name, 'int') ? '1' : '0';
+		if ($def[1] !== 'lifetime') {
+			continue;
 		}
-		dolibarr_set_const($db, $name, (string) $val, 'chaine', 0, '', $conf->entity);
+		list(, $min, $max) = $lifetimeBounds[$name];
+		$raw = trim(GETPOST($name, 'alphanohtml'));
+		if (!preg_match('/^[0-9]{1,9}$/', $raw) || (int) $raw < $min || (int) $raw > $max) {
+			$errors[] = $langs->trans('RestOAuthLifetimeInvalid', $langs->transnoentitiesnoconv($def[0]), $min, $max);
+		}
 	}
-	setEventMessages($langs->trans('SetupSaved'), null);
-	header('Location: '.$_SERVER['PHP_SELF']);
-	exit;
+	if ($errors) {
+		setEventMessages(null, $errors, 'errors');
+		foreach ($settings as $name => $def) {
+			$posted[$name] = $def[1] === 'yesno' ? (GETPOST($name, 'int') ? '1' : '0') : GETPOST($name, 'restricthtml');
+		}
+	} else {
+		foreach ($settings as $name => $def) {
+			$val = GETPOST($name, $def[1] === 'int' ? 'int' : 'restricthtml');
+			if ($def[1] === 'yesno') {
+				$val = GETPOST($name, 'int') ? '1' : '0';
+			} elseif ($def[1] === 'lifetime') {
+				$val = (string) ((int) trim(GETPOST($name, 'alphanohtml')));
+			}
+			dolibarr_set_const($db, $name, (string) $val, 'chaine', 0, '', $conf->entity);
+		}
+		setEventMessages($langs->trans('SetupSaved'), null);
+		header('Location: '.$_SERVER['PHP_SELF']);
+		exit;
+	}
 }
 if ($action === 'deleteclient') {
 	$cid = GETPOSTINT('clientrowid');
@@ -74,14 +99,24 @@ print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'">';
 print '<input type="hidden" name="token" value="'.newToken().'"><input type="hidden" name="action" value="update">';
 print '<table class="noborder centpercent"><tr class="liste_titre"><td>'.$langs->trans('Parameter').'</td><td>'.$langs->trans('Value').'</td></tr>';
 foreach ($settings as $name => $def) {
-	$val = getDolGlobalString($name);
-	print '<tr class="oddeven"><td class="titlefield">'.$langs->trans($def[0]).'</td><td>';
+	if (array_key_exists($name, $posted)) {
+		$val = $posted[$name];
+	} elseif ($def[1] === 'lifetime') {
+		$val = (string) restoauth_lifetime($name);
+	} else {
+		$val = getDolGlobalString($name);
+	}
+	print '<tr class="oddeven"><td class="titlefield">'.$langs->trans($def[0]);
+	if ($def[1] === 'lifetime') {
+		print '<br><span class="opacitymedium small">'.$langs->trans('RestOAuthAllowedRange', $lifetimeBounds[$name][1], $lifetimeBounds[$name][2]).'</span>';
+	}
+	print '</td><td>';
 	if ($def[1] === 'text') {
 		print '<textarea name="'.$name.'" rows="3" class="quatrevingtpercent">'.dol_escape_htmltag($val).'</textarea>';
 	} elseif ($def[1] === 'yesno') {
 		print '<input type="checkbox" name="'.$name.'" value="1"'.($val ? ' checked' : '').'>';
 	} else {
-		print '<input type="text" name="'.$name.'" class="'.($def[1] === 'int' ? 'width75' : 'quatrevingtpercent').'" value="'.dol_escape_htmltag($val).'">';
+		print '<input type="text" name="'.$name.'" class="'.(in_array($def[1], array('int', 'lifetime'), true) ? 'width75' : 'quatrevingtpercent').'" value="'.dol_escape_htmltag($val).'">';
 	}
 	print '</td></tr>';
 }

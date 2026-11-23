@@ -73,7 +73,7 @@ same way (Dolibarr replaces the module folder); to roll back, install the older 
    - **Allow loopback redirects** (`http://localhost`, `127.0.0.1`, `[::1]`): only for local tests.
    - **Issuer**: leave empty to use the module URL (`<dolibarr>/custom/restoauth`). Set it only if
      Dolibarr is reached under a different public URL, for example behind a reverse proxy.
-   - Token and connection lifetimes (see [Lifetimes](#lifetimes)).
+   - Token, code, consent request and connection lifetimes (see [Lifetimes](#lifetimes)).
 3. **Grant the connect right.** Give the users or groups that may use the assistant the right
    **"Connect applications (AI assistant) via OAuth with own rights"** (REST-OAuth module).
    Administrators may always connect. Users without this right cannot authorize a client.
@@ -153,12 +153,21 @@ files of Dolibarr 23.0.3.
 | Setting | Default | Configurable |
 | --- | --- | --- |
 | Access token | 3600 s | yes (`RESTOAUTH_ACCESS_TOKEN_LIFETIME`, at least 60 s) |
+| Authorization code (single use) | 120 s | yes (`RESTOAUTH_CODE_LIFETIME`, 30 to 600 s) |
+| Signed authorization request (authorize → login and consent) | 900 s (15 min) | yes (`RESTOAUTH_CONSENT_REQUEST_LIFETIME`, 60 to 3600 s) |
 | Connection without use (refresh token idle) | 30 days | yes (`RESTOAUTH_REFRESH_IDLE_DAYS`) |
 | Connection at most (refresh token family) | 90 days | yes (`RESTOAUTH_REFRESH_MAX_DAYS`, at least the idle value) |
-| Authorization code | 120 s, single use | no |
-| Signed authorization request (authorize → consent) | 15 min | no |
 
-The configurable values are set on the module's setup page.
+All values are set on the module's setup page. For the code and the consent request lifetimes the
+page shows the allowed range and refuses the whole save if a value is not a whole number inside it;
+the rule of thumb from RFC 6749 is a code lifetime of at most 10 minutes. The consent request
+lifetime is the time a user has from the client's authorize request until they click **Allow**,
+including the Dolibarr or Keycloak login.
+
+A changed lifetime applies to codes and requests created after the change: the expiry is fixed when
+the code or the request is created. If a constant is missing (for example after updating from
+0.1.0 without reactivating the module) the default applies; a value set outside the setup page is
+clamped to the allowed range.
 
 ## How the REST API accepts the token (Dolibarr 23)
 
@@ -192,7 +201,8 @@ encrypted. When the module is disabled, the tables stay. To end connections: use
 
 ## Security notes
 
-- PKCE S256 is mandatory; authorization codes are single use and live 120 s.
+- PKCE S256 is mandatory; authorization codes are single use and live 120 s by default
+  (configurable, at most 10 minutes).
 - A refresh token is rotated on every use. Reusing an old refresh token revokes the whole
   connection.
 - Tokens are bound to the resource the client asked for; restrict **Allowed resources** to your MCP
@@ -227,7 +237,7 @@ the same tag always gives the same ZIP. Repo-only files (`AGENTS.md`, `docs/`, `
 out via `export-ignore` in `.gitattributes`.
 
 ```sh
-bash scripts/build-release-zip.sh v0.1.0
+bash scripts/build-release-zip.sh v0.2.0
 ```
 
 Release steps: set the new version in the module descriptor, add a `CHANGELOG.md` entry, commit,

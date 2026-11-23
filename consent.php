@@ -1,6 +1,6 @@
 <?php
 /* restoauth - Zustimmungsseite. Laeuft hinter der normalen Dolibarr-Anmeldung (Formular oder Keycloak/openid_connect).
- * Nach "Erlauben" wird ein einmaliger Autorisierungscode (2 Minuten) erzeugt und der Browser zum Client zurueckgeschickt. */
+ * Nach "Erlauben" wird ein einmaliger Autorisierungscode (lifetime RESTOAUTH_CODE_LIFETIME, default 120 s) erzeugt und der Browser zum Client zurueckgeschickt. */
 require __DIR__.'/lib/bootstrap.inc.php';
 
 $langs->loadLangs(array('restoauth@restoauth', 'users', 'admin'));
@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'allow') {
 	$sql .= " '".$db->escape($req['redirect_uri'])."', '".$db->escape($req['code_challenge'])."',";
 	$sql .= " ".($req['resource'] !== '' ? "'".$db->escape($req['resource'])."'" : "NULL").",";
 	$sql .= " ".($req['scope'] !== '' ? "'".$db->escape($req['scope'])."'" : "NULL").",";
-	$sql .= " '".$db->idate($now + 120)."', '".$db->idate($now)."')";
+	$sql .= " '".$db->idate($now + restoauth_lifetime('RESTOAUTH_CODE_LIFETIME'))."', '".$db->idate($now)."')";
 	if (!$db->query($sql)) {
 		$sendBack(array('error' => 'server_error', 'error_description' => 'Could not store authorization code'));
 	}

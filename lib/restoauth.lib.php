@@ -147,6 +147,38 @@ function restoauth_signing_key()
 }
 
 /**
+ * Configurable lifetimes in seconds: constant => array(default, minimum, maximum).
+ * The setup page refuses values outside these bounds.
+ *
+ * @return array<string,array{0:int,1:int,2:int}>
+ */
+function restoauth_lifetime_bounds()
+{
+	return array(
+		'RESTOAUTH_CODE_LIFETIME' => array(120, 30, 600),
+		'RESTOAUTH_CONSENT_REQUEST_LIFETIME' => array(900, 60, 3600),
+	);
+}
+
+/**
+ * Effective lifetime in seconds: the configured value, the default if unset or not a number,
+ * clamped to the bounds (in case the constant was edited outside the setup page).
+ *
+ * @param string $name Constant from restoauth_lifetime_bounds()
+ * @return int
+ */
+function restoauth_lifetime($name)
+{
+	$bounds = restoauth_lifetime_bounds();
+	list($default, $min, $max) = $bounds[$name];
+	$val = trim(getDolGlobalString($name));
+	if ($val === '' || !ctype_digit($val)) {
+		return $default;
+	}
+	return min($max, max($min, (int) $val));
+}
+
+/**
  * Autorisierungsanfrage signiert und hex-kodiert verpacken (kein state/code in der URL der Zustimmungsseite,
  * sonst kollidiert der Parameter state mit dem Keycloak-Login von Dolibarr 23).
  *
@@ -155,7 +187,7 @@ function restoauth_signing_key()
  */
 function restoauth_pack_request($req)
 {
-	$req['exp'] = dol_now() + 900;
+	$req['exp'] = dol_now() + restoauth_lifetime('RESTOAUTH_CONSENT_REQUEST_LIFETIME');
 	$payload = json_encode($req, JSON_UNESCAPED_SLASHES);
 	return bin2hex($payload).'.'.hash_hmac('sha256', $payload, restoauth_signing_key());
 }

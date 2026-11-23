@@ -29,7 +29,7 @@ class modRestOAuth extends DolibarrModules
 		$this->description = 'OAuth 2.1 server for the REST API (AI assistants, MCP) with login via Dolibarr/Keycloak';
 		$this->descriptionlong = 'Issues per-user REST API tokens through OAuth 2.1 (authorization code + PKCE, dynamic client registration, rotating refresh tokens, revocation).';
 		$this->editor_name = 'storkakos';
-		$this->version = '0.1.0';
+		$this->version = '0.2.0';
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		$this->picto = 'technic';
 
@@ -49,6 +49,8 @@ class modRestOAuth extends DolibarrModules
 
 		$this->const = array(
 			array('RESTOAUTH_ACCESS_TOKEN_LIFETIME', 'chaine', '3600', 'Access token lifetime in seconds', 0, 'current', 0),
+			array('RESTOAUTH_CODE_LIFETIME', 'chaine', '120', 'Authorization code lifetime in seconds (30-600)', 0, 'current', 0),
+			array('RESTOAUTH_CONSENT_REQUEST_LIFETIME', 'chaine', '900', 'Signed authorize-to-consent request lifetime in seconds (60-3600)', 0, 'current', 0),
 			array('RESTOAUTH_REFRESH_IDLE_DAYS', 'chaine', '30', 'Refresh token: days without use until it expires', 0, 'current', 0),
 			array('RESTOAUTH_REFRESH_MAX_DAYS', 'chaine', '90', 'Refresh token family: maximum age in days', 0, 'current', 0),
 			array('RESTOAUTH_ALLOW_LOOPBACK', 'chaine', '0', 'Allow http://localhost / 127.0.0.1 redirect URIs', 0, 'current', 0),
