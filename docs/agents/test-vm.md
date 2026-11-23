@@ -15,12 +15,32 @@ repos use.
 No password is written down anywhere. If the key is missing or rejected, ask the maintainer. Don't
 try to guess or recover a password.
 
-## What runs where
+## Tests always run on the VM
 
-- **PHP lint** (`scripts/lint-php.sh`): on the VM, or locally if a `php` binary is on the `PATH`.
+Run every test on the VM, never locally on the Windows dev machine: it is slow, has no admin
+rights and a heavy virus scanner.
+
+- **PHP lint** (`scripts/lint-php.sh`): on the VM, with `scripts/test-on-vm.sh` (below).
 - **End-to-end tests of the module**: in the test stack of `dolibarr-mcp-server` (Dolibarr 23,
   Keycloak, LibreChat), which installs restoauth from a pinned tag. See that repo's
   `docs/agents/test-vm.md` and `test-stack/README.md`.
+
+## One command: `scripts/test-on-vm.sh`
+
+From Git Bash in your checkout or worktree:
+
+```sh
+RUN=ro16 bash scripts/test-on-vm.sh
+```
+
+The script does the steps below for you: it copies the working tree to
+`/root/dolibarr-restoauth-$RUN`, runs `scripts/lint-php.sh` there (container `$RUN-lint`), prints
+the output, removes the folder and the container again, also on failure or Ctrl-C, and exits with
+the lint's exit code. It refuses to start if the folder already exists, so it never touches
+another run. Without `RUN` it picks a random `dev-<hex>` name. The lint needs no port. `VM_HOST`,
+`VM_KEY` and `VM_KNOWN_HOSTS` override the connection settings in the table above.
+
+The sections below are the manual steps, for debugging.
 
 ## Connect
 
