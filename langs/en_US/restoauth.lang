@@ -1,0 +1,42 @@
+# restoauth
+Module525100Name = REST OAuth (AI access)
+Module525100Desc = OAuth 2.1 server for the REST API: AI assistants (MCP) act with the rights of the signed-in user
+Permission52510001 = Connect applications (AI assistant) via OAuth with own rights
+Permission52510002 = Administer OAuth clients and connections of all users
+ConnectedApps = Connected applications
+RestOAuthSetup = REST OAuth setup
+RestOAuthConsentTitle = Allow access?
+RestOAuthConsentIntro = An application wants to access Dolibarr on your behalf.
+RestOAuthApplication = Application
+RestOAuthReturnsTo = Returns to
+RestOAuthResource = Resource (MCP server)
+RestOAuthRightsIntro = The application gets exactly your Dolibarr permissions (they cannot be narrowed). These are:
+RestOAuthAdminWarning = You are an administrator: the application can do everything you can.
+RestOAuthRevokeHint = You can end the connection at any time under User > Connected applications.
+RestOAuthAllow = Allow
+RestOAuthDeny = Deny
+RestOAuthNotAllowed = Your user may not connect applications (permission "Connect applications via OAuth" missing). Please contact your administrator.
+RestOAuthRequestInvalid = The request is invalid or expired. Please start the connection again in the application.
+RestOAuthNoConnections = No connected applications
+RestOAuthConnectedSince = Connected since
+RestOAuthLastRenewal = Last renewal
+RestOAuthValidUntil = Valid until (without use)
+RestOAuthAccessTokenUntil = Current access token until
+RestOAuthRevoke = End connection
+RestOAuthRevoked = Connection ended
+RestOAuthAccessLifetime = Access token lifetime (seconds)
+RestOAuthIdleDays = Connection expires after days without use
+RestOAuthMaxDays = Maximum connection age (days)
+RestOAuthRedirectAllowlist = Allowed redirect URIs (one per line, trailing * = prefix)
+RestOAuthAllowLoopback = Allow loopback redirects (http://localhost, 127.0.0.1)
+RestOAuthResources = Allowed resources / MCP server URLs (one per line, empty = all)
+RestOAuthIssuer = Issuer (empty = automatic)
+RestOAuthApiInTokenTable = API tokens from token table (API_IN_TOKEN_TABLE)
+RestOAuthEndpoints = Endpoints
+RestOAuthClients = Registered clients
+RestOAuthWellKnownHint = For automatic discovery the web server must rewrite /.well-known/oauth-authorization-server/custom/restoauth to metadata.php (see README).
+RestOAuthCronLabel = REST OAuth: delete expired tokens
+RestOAuthCleanup = REST OAuth: delete expired tokens
+RestOAuthHookMode = Module tokens are mapped by a hook (beforeApiCall) to the user's internal API key for each API request; the module checks expiry and revocation. Existing DOLAPIKEY integrations keep working.
+RestOAuthTokenTableBroken = Warning: in Dolibarr 23 the core token table is broken (SQL error, every API request returns 503). Please disable API_IN_TOKEN_TABLE.
+RestOAuthTokenTableMode = The core reads tokens from llx_oauth_token itself; the module additionally checks expiry.

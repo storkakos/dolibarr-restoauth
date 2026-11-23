@@ -1,0 +1,10 @@
+# Every text file gets LF in the working tree, also on Windows with core.autocrlf=true.
+# PHP, SQL, shell scripts and the language files end up in Linux containers (Dolibarr in the test
+# stack, the release ZIP); a trailing \r breaks shell scripts there and pollutes PHP output.
+* text=auto eol=lf
+*.php text eol=lf
+*.sql text eol=lf
+*.sh text eol=lf
+*.lang text eol=lf
+*.json text eol=lf
+*.md text eol=lf

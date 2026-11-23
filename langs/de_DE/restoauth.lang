@@ -1,0 +1,42 @@
+# restoauth
+Module525100Name = REST-OAuth (KI-Zugang)
+Module525100Desc = OAuth-2.1-Server für die REST-API: KI-Assistenten (MCP) arbeiten mit den Rechten des angemeldeten Benutzers
+Permission52510001 = Anwendungen (KI-Assistent) per OAuth mit eigenen Rechten verbinden
+Permission52510002 = OAuth-Clients und Verbindungen aller Benutzer verwalten
+ConnectedApps = Verbundene Anwendungen
+RestOAuthSetup = Einstellungen REST-OAuth
+RestOAuthConsentTitle = Zugriff erlauben?
+RestOAuthConsentIntro = Eine Anwendung möchte in Ihrem Namen auf Dolibarr zugreifen.
+RestOAuthApplication = Anwendung
+RestOAuthReturnsTo = Rücksprung zu
+RestOAuthResource = Ressource (MCP-Server)
+RestOAuthRightsIntro = Die Anwendung erhält genau Ihre Rechte in Dolibarr (keine Einschränkung möglich). Das sind:
+RestOAuthAdminWarning = Sie sind Administrator: Die Anwendung kann alles, was Sie können.
+RestOAuthRevokeHint = Sie können die Verbindung jederzeit unter Benutzer > Verbundene Anwendungen beenden.
+RestOAuthAllow = Erlauben
+RestOAuthDeny = Ablehnen
+RestOAuthNotAllowed = Ihr Benutzer darf keine Anwendungen verbinden (Recht "Anwendungen per OAuth verbinden" fehlt). Bitte wenden Sie sich an die Administration.
+RestOAuthRequestInvalid = Die Anfrage ist ungültig oder abgelaufen. Bitte starten Sie die Verbindung in der Anwendung neu.
+RestOAuthNoConnections = Keine verbundenen Anwendungen
+RestOAuthConnectedSince = Verbunden seit
+RestOAuthLastRenewal = Zuletzt erneuert
+RestOAuthValidUntil = Gültig bis (ohne Nutzung)
+RestOAuthAccessTokenUntil = Aktueller Zugriffstoken bis
+RestOAuthRevoke = Verbindung beenden
+RestOAuthRevoked = Verbindung beendet
+RestOAuthAccessLifetime = Laufzeit Zugriffstoken (Sekunden)
+RestOAuthIdleDays = Verbindung verfällt nach Tagen ohne Nutzung
+RestOAuthMaxDays = Verbindung höchstens (Tage)
+RestOAuthRedirectAllowlist = Erlaubte Redirect-URIs (eine pro Zeile, * am Ende = Präfix)
+RestOAuthAllowLoopback = Loopback-Redirects erlauben (http://localhost, 127.0.0.1)
+RestOAuthResources = Erlaubte Ressourcen / MCP-Server-URLs (eine pro Zeile, leer = alle)
+RestOAuthIssuer = Issuer (leer = automatisch)
+RestOAuthApiInTokenTable = API-Tokens aus der Token-Tabelle (API_IN_TOKEN_TABLE)
+RestOAuthEndpoints = Endpunkte
+RestOAuthClients = Registrierte Clients
+RestOAuthWellKnownHint = Für die automatische Erkennung braucht der Webserver eine Weiterleitung von /.well-known/oauth-authorization-server/custom/restoauth auf metadata.php (siehe README).
+RestOAuthCronLabel = REST-OAuth: abgelaufene Tokens löschen
+RestOAuthCleanup = REST-OAuth: abgelaufene Tokens löschen
+RestOAuthHookMode = Die Tokens des Moduls werden per Hook (beforeApiCall) für jede API-Anfrage auf den internen API-Schlüssel des Benutzers abgebildet; Ablauf und Widerruf prüft das Modul. Bestehende DOLAPIKEY-Anbindungen bleiben gültig.
+RestOAuthTokenTableBroken = Achtung: In Dolibarr 23 ist die Token-Tabelle des Kerns defekt (SQL-Fehler, jede API-Anfrage endet mit 503). API_IN_TOKEN_TABLE bitte ausschalten.
+RestOAuthTokenTableMode = Der Kern liest die Tokens selbst aus llx_oauth_token; das Modul prüft zusätzlich den Ablauf.

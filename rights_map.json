@@ -1,0 +1,49 @@
+{
+  "_comment": "Welche Dolibarr-Rechte ein REST-Pfad braucht. Standardregel: erstes Pfadsegment = Modul, GET -> lire/read, POST/PUT -> creer/write, DELETE -> supprimer/delete. Hier stehen nur Ausnahmen (gelesen in den api_*.class.php von Dolibarr 23.0.3). Ein leerer Wert bedeutet: jeder angemeldete Benutzer, Dolibarr prueft selbst. Eine Liste bedeutet: alle Rechte noetig.",
+  "default": { "GET": ["lire", "read"], "POST": ["creer", "write"], "PUT": ["creer", "write"], "DELETE": ["supprimer", "delete"] },
+  "endpoints": {
+    "thirdparties":      { "module": "societe" },
+    "contacts":          { "GET": "societe.contact.lire", "POST": "societe.contact.creer", "PUT": "societe.contact.creer", "DELETE": "societe.contact.supprimer" },
+    "invoices":          { "module": "facture" },
+    "proposals":         { "module": "propal" },
+    "orders":            { "module": "commande" },
+    "products":          { "module": "produit" },
+    "projects":          { "module": "projet" },
+    "tasks":             { "module": "projet" },
+    "contracts":         { "module": "contrat" },
+    "shipments":         { "module": "expedition" },
+    "interventions":     { "module": "ficheinter" },
+    "expensereports":    { "module": "expensereport" },
+    "donations":         { "module": "don" },
+    "members":           { "module": "adherent" },
+    "receptions":        { "module": "reception" },
+    "warehouses":        { "module": "stock" },
+    "stockmovements":    { "GET": "stock.mouvement.lire", "POST": "stock.creer", "PUT": "stock.creer", "DELETE": "stock.supprimer" },
+    "bankaccounts":      { "GET": "banque.lire", "POST": "banque.configurer", "PUT": "banque.modifier", "DELETE": "banque.configurer" },
+    "categories":        { "GET": "categorie.lire", "POST": "categorie.creer", "PUT": "categorie.creer", "DELETE": "categorie.supprimer" },
+    "tickets":           { "GET": "ticket.read", "POST": "ticket.write", "PUT": "ticket.write", "DELETE": "ticket.delete" },
+    "agendaevents":      { "GET": "agenda.myactions.read", "POST": "agenda.myactions.create", "PUT": "agenda.myactions.create", "DELETE": "agenda.myactions.delete" },
+    "users":             { "GET": "user.user.lire", "POST": "user.user.creer", "PUT": "user.user.creer", "DELETE": "user.user.supprimer" },
+    "supplierinvoices":  { "GET": "fournisseur.facture.lire", "POST": "fournisseur.facture.creer", "PUT": "fournisseur.facture.creer", "DELETE": "fournisseur.facture.supprimer" },
+    "supplierorders":    { "GET": "fournisseur.commande.lire", "POST": "fournisseur.commande.creer", "PUT": "fournisseur.commande.creer", "DELETE": "fournisseur.commande.supprimer" },
+    "supplierproposals": { "module": "supplier_proposal" },
+    "holidays":          { "GET": "holiday.read", "POST": "holiday.write", "PUT": "holiday.write", "DELETE": "holiday.delete" },
+    "boms":              { "GET": "bom.read", "POST": "bom.write", "PUT": "bom.write", "DELETE": "bom.delete" },
+    "mos":               { "GET": "mrp.read", "POST": "mrp.write", "PUT": "mrp.write", "DELETE": "mrp.delete" },
+    "status":            { "GET": "" },
+    "setup":             { "GET": "" },
+    "restoauth":         { "GET": "" }
+  },
+  "paths": {
+    "GET /thirdparties/{id}/getinvoicesqualifiedforreplacement": ["societe.lire", "facture.lire"],
+    "GET /thirdparties/{id}/getinvoicesqualifiedforcreditnote": ["societe.lire", "facture.lire"],
+    "GET /thirdparties/{id}/outstandinginvoices": ["societe.lire", "facture.lire"],
+    "POST /invoices/createfromorder/{orderid}": ["commande.lire", "facture.creer"],
+    "POST /orders/createfromproposal/{proposalid}": ["propal.lire", "commande.creer"]
+  },
+  "notes": [
+    "societe.client.voir entscheidet, ob ein Benutzer alle Geschaeftspartner sieht oder nur die eigenen; Dolibarr filtert die Antwort selbst.",
+    "Kategorien pruefen categorie.lire, nicht das Recht des Objekt-Moduls.",
+    "GET /thirdparties/{id}/outstandinginvoices prueft im Kern (23.0.3) nur societe.lire und zeigt offene Rechnungsbetraege; hier bewusst strenger mit facture.lire."
+  ]
+}
