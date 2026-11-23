@@ -29,7 +29,7 @@ RestOAuthCodeLifetime = Laufzeit Autorisierungscode (Sekunden)
 RestOAuthConsentRequestLifetime = Zeit für Anmeldung und Zustimmung nach der Anfrage der Anwendung (Sekunden)
 RestOAuthAllowedRange = erlaubt: %s bis %s
 RestOAuthLifetimeInvalid = %s: bitte eine ganze Zahl von %s bis %s eingeben. Es wurde nichts gespeichert.
-RestOAuthIdleExceedsMax = %s darf nicht größer sein als %s. Es wurde nichts gespeichert.
+RestOAuthIdleExceedsMax = „%s“ darf nicht größer sein als „%s“. Es wurde nichts gespeichert.
 RestOAuthIdleDays = Verbindung verfällt nach Tagen ohne Nutzung
 RestOAuthMaxDays = Verbindung höchstens (Tage)
 RestOAuthRedirectAllowlist = Erlaubte Redirect-URIs (eine pro Zeile, * am Ende = Präfix)
