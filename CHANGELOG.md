@@ -4,6 +4,20 @@ All notable changes to restoauth are listed here. Versions follow [Semantic Vers
 each release is a git tag `vX.Y.Z` with the ZIP `module_restoauth-X.Y.Z.zip` for Dolibarr's module
 upload.
 
+## 0.2.1 - 2026-11-23
+
+- The setup page now also validates the access token lifetime (`RESTOAUTH_ACCESS_TOKEN_LIFETIME`,
+  60 to 86400 s), the connection idle days (`RESTOAUTH_REFRESH_IDLE_DAYS`, 1 to 365) and the
+  connection maximum days (`RESTOAUTH_REFRESH_MAX_DAYS`, 1 to 365). A value that is not a whole
+  number inside its range, or idle days greater than the maximum days, refuses the whole save with
+  an error naming the setting; the entered values stay in the form. Before, these values were only
+  clamped at runtime.
+- Runtime: these three settings use the same bounds as the setup page. A missing or non-numeric value
+  now falls back to the default (3600 s, 30 days, 90 days) instead of the minimum; a value outside
+  the range is clamped, and a maximum below the idle days still counts as the idle days.
+- Upgrading from 0.2.0: install the ZIP over the old version. Clients, connections and settings are
+  kept; no new constants.
+
 ## 0.2.0 - 2026-11-23
 
 - The authorization code lifetime (`RESTOAUTH_CODE_LIFETIME`, default 120 s, 30 to 600 s) and the

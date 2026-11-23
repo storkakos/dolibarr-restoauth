@@ -22,11 +22,11 @@ if (!$user->admin) {
 
 $action = GETPOST('action', 'aZ09');
 $settings = array(
-	'RESTOAUTH_ACCESS_TOKEN_LIFETIME' => array('RestOAuthAccessLifetime', 'int'),
+	'RESTOAUTH_ACCESS_TOKEN_LIFETIME' => array('RestOAuthAccessLifetime', 'lifetime'),
 	'RESTOAUTH_CODE_LIFETIME' => array('RestOAuthCodeLifetime', 'lifetime'),
 	'RESTOAUTH_CONSENT_REQUEST_LIFETIME' => array('RestOAuthConsentRequestLifetime', 'lifetime'),
-	'RESTOAUTH_REFRESH_IDLE_DAYS' => array('RestOAuthIdleDays', 'int'),
-	'RESTOAUTH_REFRESH_MAX_DAYS' => array('RestOAuthMaxDays', 'int'),
+	'RESTOAUTH_REFRESH_IDLE_DAYS' => array('RestOAuthIdleDays', 'lifetime'),
+	'RESTOAUTH_REFRESH_MAX_DAYS' => array('RestOAuthMaxDays', 'lifetime'),
 	'RESTOAUTH_ALLOW_LOOPBACK' => array('RestOAuthAllowLoopback', 'yesno'),
 	'RESTOAUTH_REDIRECT_ALLOWLIST' => array('RestOAuthRedirectAllowlist', 'text'),
 	'RESTOAUTH_RESOURCES' => array('RestOAuthResources', 'text'),
@@ -38,6 +38,7 @@ $posted = array();	// values of a refused save, shown again in the form
 if ($action === 'update') {
 	// Validate the lifetimes first; one invalid value refuses the whole save
 	$errors = array();
+	$valid = array();
 	foreach ($settings as $name => $def) {
 		if ($def[1] !== 'lifetime') {
 			continue;
@@ -46,7 +47,13 @@ if ($action === 'update') {
 		$raw = trim(GETPOST($name, 'alphanohtml'));
 		if (!preg_match('/^[0-9]{1,9}$/', $raw) || (int) $raw < $min || (int) $raw > $max) {
 			$errors[] = $langs->trans('RestOAuthLifetimeInvalid', $langs->transnoentitiesnoconv($def[0]), $min, $max);
+		} else {
+			$valid[$name] = (int) $raw;
 		}
+	}
+	if (isset($valid['RESTOAUTH_REFRESH_IDLE_DAYS'], $valid['RESTOAUTH_REFRESH_MAX_DAYS'])
+		&& $valid['RESTOAUTH_REFRESH_IDLE_DAYS'] > $valid['RESTOAUTH_REFRESH_MAX_DAYS']) {
+		$errors[] = $langs->trans('RestOAuthIdleExceedsMax', $langs->transnoentitiesnoconv('RestOAuthIdleDays'), $langs->transnoentitiesnoconv('RestOAuthMaxDays'));
 	}
 	if ($errors) {
 		setEventMessages(null, $errors, 'errors');
@@ -55,11 +62,11 @@ if ($action === 'update') {
 		}
 	} else {
 		foreach ($settings as $name => $def) {
-			$val = GETPOST($name, $def[1] === 'int' ? 'int' : 'restricthtml');
+			$val = GETPOST($name, 'restricthtml');
 			if ($def[1] === 'yesno') {
 				$val = GETPOST($name, 'int') ? '1' : '0';
 			} elseif ($def[1] === 'lifetime') {
-				$val = (string) ((int) trim(GETPOST($name, 'alphanohtml')));
+				$val = (string) $valid[$name];
 			}
 			dolibarr_set_const($db, $name, (string) $val, 'chaine', 0, '', $conf->entity);
 		}
@@ -116,7 +123,7 @@ foreach ($settings as $name => $def) {
 	} elseif ($def[1] === 'yesno') {
 		print '<input type="checkbox" name="'.$name.'" value="1"'.($val ? ' checked' : '').'>';
 	} else {
-		print '<input type="text" name="'.$name.'" class="'.(in_array($def[1], array('int', 'lifetime'), true) ? 'width75' : 'quatrevingtpercent').'" value="'.dol_escape_htmltag($val).'">';
+		print '<input type="text" name="'.$name.'" class="'.($def[1] === 'lifetime' ? 'width75' : 'quatrevingtpercent').'" value="'.dol_escape_htmltag($val).'">';
 	}
 	print '</td></tr>';
 }
