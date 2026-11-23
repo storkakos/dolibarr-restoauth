@@ -230,6 +230,15 @@ Lint every PHP file (`php -l`); the script uses a local `php` or, if there is no
 bash scripts/lint-php.sh
 ```
 
+On the Windows dev machine, never run it locally: one command copies the working tree
+(uncommitted changes included) to the test VM, runs the lint there, shows the result with the
+lint's exit code and cleans up. Run it from Git Bash; see
+[docs/agents/test-vm.md](docs/agents/test-vm.md):
+
+```sh
+bash scripts/test-on-vm.sh
+```
+
 Build the release ZIP from a tag. The script checks that the tag `vX.Y.Z` matches
 `$this->version` in `core/modules/modRestOAuth.class.php` and writes
 `dist/module_restoauth-X.Y.Z.zip` with `git archive`, so only committed files of that tag go in and

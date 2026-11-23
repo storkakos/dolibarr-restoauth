@@ -5,8 +5,9 @@ the way Dolibarr expects them inside `htdocs/custom/restoauth`. Only Dolibarr 23
 Docs, code comments and commit messages are in English; the module keeps its `de_DE` and `en_US`
 language files.
 
-Before you finish a change to PHP files, run `bash scripts/lint-php.sh` (on the test VM if there is
-no local `php`).
+Tests never run locally on this machine. Before you finish a change to PHP files, run
+`bash scripts/test-on-vm.sh`: it runs `scripts/lint-php.sh` on the test VM and cleans up after
+itself.
 
 ## Agent skills
 
