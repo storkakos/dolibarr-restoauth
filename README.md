@@ -113,7 +113,9 @@ RewriteRule ^/?\.well-known/(oauth-authorization-server|openid-configuration)/cu
 RewriteRule ^/?custom/restoauth/\.well-known/(oauth-authorization-server|openid-configuration)/?$ /custom/restoauth/metadata.php [L]
 ```
 
-nginx (in the `server` block that serves Dolibarr):
+nginx (in the `server` block that serves Dolibarr). Tested with nginx 1.30.5 in front of Dolibarr's
+Apache: the metadata answers at the server root and inside the issuer path, with the right issuer.
+The block is self-contained, so copy it as it is:
 
 ```nginx
 location ~ ^/\.well-known/(oauth-authorization-server|openid-configuration)/custom/restoauth/?$ {
