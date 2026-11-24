@@ -54,7 +54,9 @@ upload must be allowed in Dolibarr (no `installmodules.lock` in the documents fo
 exists.
 
 What changed between versions: [CHANGELOG.md](CHANGELOG.md). To update, install the newer ZIP the
-same way (Dolibarr replaces the module folder); to roll back, install the older ZIP.
+same way (Dolibarr replaces the module folder); to roll back, install the older ZIP. If the
+CHANGELOG entry says so (for example when a version adds a trigger), deactivate and activate the
+module once afterwards.
 
 ## Configure Dolibarr
 
@@ -210,6 +212,8 @@ encrypted. When the module is disabled, the tables stay. To end connections: use
 - Tokens are bound to the resource the client asked for; restrict **Allowed resources** to your MCP
   server's URL.
 - The assistant acts with the user's own Dolibarr rights; the consent page lists them.
+- Disabling a Dolibarr user ends all of that user's connections at once. Enabling the user again
+  does not revive the old tokens; the user has to connect the application again.
 
 ## Licence
 
@@ -248,7 +252,7 @@ the same tag always gives the same ZIP. Repo-only files (`AGENTS.md`, `docs/`, `
 out via `export-ignore` in `.gitattributes`.
 
 ```sh
-bash scripts/build-release-zip.sh v0.2.1
+bash scripts/build-release-zip.sh v0.2.2
 ```
 
 Release steps: set the new version in the module descriptor, add a `CHANGELOG.md` entry, commit,

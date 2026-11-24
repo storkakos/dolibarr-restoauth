@@ -4,6 +4,19 @@ All notable changes to restoauth are listed here. Versions follow [Semantic Vers
 each release is a git tag `vX.Y.Z` with the ZIP `module_restoauth-X.Y.Z.zip` for Dolibarr's module
 upload.
 
+## 0.2.2 - 2026-11-24
+
+- Disabling a Dolibarr user now ends all of that user's connections at once: their refresh tokens
+  are locked and their access tokens deleted (trigger on `USER_ENABLEDISABLE`). Enabling the user
+  again does not bring the old tokens back; the user connects the application again. Before, an
+  access token that was not used while the user was disabled worked again after re-enabling.
+- The REST hook also ends all connections of a user when it sees a restoauth token of a disabled or
+  deleted user (a status changed without the trigger, e.g. directly in the database), and answers
+  `401`.
+- Upgrading from 0.2.1: install the ZIP over the old version, then deactivate and activate the module
+  once in Setup → Modules so that Dolibarr registers the new trigger. Clients, connections and
+  settings are kept; no new constants.
+
 ## 0.2.1 - 2026-11-23
 
 - The setup page now also validates the access token lifetime (`RESTOAUTH_ACCESS_TOKEN_LIFETIME`,
