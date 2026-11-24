@@ -4,6 +4,7 @@
  *  - Abgelaufener Token des Moduls -> 401, Datensatz wird geloescht (der Kern beachtet expire_at nicht).
  *  - Gueltiger Token des Moduls -> fuer diese Anfrage durch den internen API-Schluessel des Benutzers ersetzt
  *    (Dolibarr 23: API_IN_TOKEN_TABLE ist im Kern defekt). Der Kern prueft danach Benutzerstatus und Rechte.
+ *  - Token of a disabled user -> 401, all connections of the user are revoked.
  *  - Alles andere bleibt unveraendert (normale DOLAPIKEY-Anbindungen funktionieren weiter). */
 
 require_once __DIR__.'/../lib/restoauth.lib.php';
@@ -70,6 +71,15 @@ class ActionsRestoauth
 			$this->db->query("DELETE FROM ".$this->db->prefix()."oauth_token WHERE rowid = ".((int) $at->rowid));
 			dol_syslog('restoauth: expired access token rejected (connection '.$at->family_id.')', LOG_NOTICE);
 			$this->reject('The access token expired');
+		}
+		// A disabled user loses every connection. The trigger does this when the user is disabled
+		// (USER_ENABLEDISABLE); this catches a status changed without the trigger, e.g. by SQL.
+		$resu = $this->db->query("SELECT statut FROM ".$this->db->prefix()."user WHERE rowid = ".((int) $at->fk_user));
+		$ou = $resu ? $this->db->fetch_object($resu) : null;
+		if (!$ou || (int) $ou->statut !== 1) {
+			restoauth_revoke_user($this->db, $at->fk_user);
+			dol_syslog('restoauth: access token of a disabled or deleted user rejected, all connections of user '.((int) $at->fk_user).' revoked', LOG_NOTICE);
+			$this->reject('The user is disabled');
 		}
 		if (getDolGlobalString('API_IN_TOKEN_TABLE')) {
 			return 0;   // ab Dolibarr 24: der Kern liest llx_oauth_token selbst

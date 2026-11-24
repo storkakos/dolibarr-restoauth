@@ -455,6 +455,20 @@ function restoauth_revoke_family($db, $familyId)
 }
 
 /**
+ * End every connection of a user: lock all their refresh tokens and delete all their access tokens.
+ * Used when the user is disabled, so that enabling them again does not revive old tokens.
+ *
+ * @param DoliDB $db     Database
+ * @param int    $userId User
+ * @return void
+ */
+function restoauth_revoke_user($db, $userId)
+{
+	$db->query("UPDATE ".$db->prefix()."restoauth_refresh SET revoked = 1 WHERE fk_user = ".((int) $userId)." AND revoked = 0");
+	$db->query("DELETE FROM ".$db->prefix()."oauth_token WHERE service = 'dolibarr_rest_api' AND fk_user = ".((int) $userId)." AND state LIKE '".$db->escape(RESTOAUTH_STATE_PREFIX)."%'");
+}
+
+/**
  * Access-Token-Datensatz zu einem Klartext-Token (nur eigene Tokens)
  *
  * @param DoliDB $db    Datenbank
