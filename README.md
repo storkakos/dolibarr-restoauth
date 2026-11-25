@@ -117,6 +117,7 @@ nginx (in the `server` block that serves Dolibarr). Tested with nginx 1.30.5 in 
 Apache: the metadata answers at the server root and inside the issuer path, with the right issuer.
 The block is self-contained, so copy it as it is:
 
+<!-- test-stack nginx block: restoauth-discovery. dolibarr-mcp-server's test stack (its test-stack/nginx/build-conf.sh) builds its nginx configuration from the next code block. Keep this line directly above it. -->
 ```nginx
 location ~ ^/\.well-known/(oauth-authorization-server|openid-configuration)/custom/restoauth/?$ {
     rewrite ^ /custom/restoauth/metadata.php last;
