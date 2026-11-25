@@ -205,7 +205,10 @@ than that, the consent page ends it the same way as the link above and returns t
 again before seeing the consent. A session younger than `max_age`, or a login made after the request,
 is used as it is. The login made for the request is never asked for again: the consent page returns to the
 request marked as "login already forced" (signed, same expiry), and a marked request is not forced a second
-time, so there is no loop, also if a login path does not update the login time. Without these parameters nothing changes. The login time is the one of this browser's Dolibarr
+time, so there is no loop, also if a login path does not update the login time. The limit of this: until the
+request expires (`RESTOAUTH_CONSENT_REQUEST_LIFETIME`, 15 minutes by default), a marked request is answered with
+whatever session the browser then has, so opening the marked URL again in the same browser (for example from its
+history) does not force another login. Without these parameters nothing changes. The login time is the one of this browser's Dolibarr
 session (stored in the PHP session by the module's `USER_LOGIN` trigger at every login), not the user's last login
 on any device, and it is the Dolibarr login, not the identity provider's. A cross-site link
 `authorize.php?...&prompt=login` (registered client, allowlisted redirect URI) therefore ends the Dolibarr session
