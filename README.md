@@ -22,12 +22,13 @@ have to be created or copied, and **no Dolibarr core code is changed**.
 3. [Configure Dolibarr](#configure-dolibarr)
 4. [Rewrite rules for discovery](#rewrite-rules-for-discovery)
 5. [Endpoints](#endpoints)
-6. [Lifetimes](#lifetimes)
-7. [How the REST API accepts the token (Dolibarr 23)](#how-the-rest-api-accepts-the-token-dolibarr-23)
-8. [Tables](#tables)
-9. [Security notes](#security-notes)
-10. [Licence](#licence)
-11. [Development](#development)
+6. [Front-channel logout (Keycloak)](#front-channel-logout-keycloak)
+7. [Lifetimes](#lifetimes)
+8. [How the REST API accepts the token (Dolibarr 23)](#how-the-rest-api-accepts-the-token-dolibarr-23)
+9. [Tables](#tables)
+10. [Security notes](#security-notes)
+11. [Licence](#licence)
+12. [Development](#development)
 
 ## Prerequisites
 
@@ -143,6 +144,7 @@ Issuer: `<dolibarr>/custom/restoauth`
 | `register.php` | Dynamic client registration (RFC 7591), redirect URIs from the allowlist only |
 | `revoke.php` | Token revocation (RFC 7009); ends the whole connection |
 | `connected.php` | User card tab **Connected applications**: list and end one's own connections |
+| `frontchannel-logout.php` | Front-channel logout URL for Keycloak: ends the browser's Dolibarr session, see [below](#front-channel-logout-keycloak) |
 | `/api/index.php/restoauth/me` | REST: user, active modules, current rights, token expiry and the rights rules from `rights_map.json` |
 | `/api/index.php/restoauth/endpoints` | REST: readable REST paths of all active API classes |
 
@@ -152,6 +154,50 @@ second one exists because Dolibarr's Swagger explorer does not run the module's 
 `rights_map.json` lists which Dolibarr rights a REST path needs where the default rule (first path
 segment = module, `GET` → `lire`/`read`) does not apply. It was read from the `api_*.class.php`
 files of Dolibarr 23.0.3.
+
+## Front-channel logout (Keycloak)
+
+When users log in through Keycloak (`openid_connect`), a logout elsewhere, for example in the MCP
+client's chat, ends the Keycloak session but not the Dolibarr session in the same browser. The next
+person who connects the assistant in that browser would then see the consent page for the previous
+user's account. Keycloak's **front-channel logout** closes this: on every Keycloak logout, Keycloak's
+logout page loads the URL of each client of the session in an iframe.
+
+Set it on the Keycloak client that Dolibarr's `openid_connect` login uses (Clients → the Dolibarr
+client → Settings → Logout settings):
+
+| Setting | Value |
+| --- | --- |
+| Front channel logout | On |
+| Front-channel logout URL | `<dolibarr>/custom/restoauth/frontchannel-logout.php`, e.g. `https://erp.example.com/custom/restoauth/frontchannel-logout.php` |
+| Backchannel logout URL | empty (Dolibarr 23 has no back-channel logout) |
+
+What the endpoint does:
+
+- With a Dolibarr session in the browser, it ends that session the way Dolibarr's own Logout does
+  (trigger `USER_LOGOUT`, hooks `afterLogout`, the PHP session is destroyed), without a redirect. The
+  next Dolibarr page shows the login page.
+- Without a session (after Dolibarr's own Logout, or a timed-out session), it does nothing.
+- Either way it answers `200` with an empty body and `Cache-Control: no-store`, and sets **no
+  cookie**. It needs no CSRF token and ignores Keycloak's `iss` and `sid` parameters.
+
+Why not Dolibarr's `user/logout.php?noredirect=1`: without a session, that page shows Dolibarr's login
+page inside the iframe, and the login page stores itself in the cookie `DOL_rollback_url_*` as the
+place to return to after the next login (for an hour, if the cookie is not set yet). The next Keycloak
+login then ends on the logout page and is logged out at once. `frontchannel-logout.php` never shows
+the login page.
+
+Limits (they come from front-channel logout, not from restoauth):
+
+- The iframe only carries Dolibarr's session cookie (`SameSite=Lax`) if Dolibarr and Keycloak are on
+  the same site (registrable domain), e.g. `erp.example.com` and `sso.example.com`. Across sites,
+  browsers send no cookie and the session stays.
+- Only a Dolibarr session opened through Keycloak belongs to the Keycloak session. A session opened
+  with Dolibarr's own login form is not ended by a Keycloak logout.
+- It only runs when the logout goes through Keycloak (the client must call Keycloak's end-session
+  endpoint) and the browser loads Keycloak's logout page.
+- Like Dolibarr's `user/logout.php`, any page can end a user's Dolibarr session by sending the browser
+  to this URL. That only logs the user out.
 
 ## Lifetimes
 
