@@ -2,7 +2,9 @@
 /* restoauth - Triggers.
  * USER_ENABLEDISABLE: when a user is disabled, every connection of that user ends at once (refresh
  * tokens locked, access tokens deleted). Enabling the user again does not bring old tokens back; the
- * user has to connect the application again. */
+ * user has to connect the application again.
+ * USER_LOGIN: stores the time of the login in the session ($_SESSION['restoauth_login_at']); prompt=login and
+ * max_age on the consent page compare with it. */
 
 require_once DOL_DOCUMENT_ROOT.'/core/triggers/dolibarrtriggers.class.php';
 require_once __DIR__.'/../../lib/restoauth.lib.php';
@@ -34,6 +36,14 @@ class InterfaceRestOAuthTriggers extends DolibarrTriggers
 	 */
 	public function runTrigger($action, $object, User $user, Translate $langs, Conf $conf)
 	{
+		if ($action === 'USER_LOGIN' && isModEnabled('restoauth')) {
+			// A login begins this browser session: remember when (see restoauth_session_login_time()).
+			if (session_status() === PHP_SESSION_ACTIVE) {
+				$_SESSION['restoauth_login_at'] = dol_now();
+				$_SESSION['restoauth_login_at_us'] = round(microtime(true), 6);
+			}
+			return 0;
+		}
 		if ($action !== 'USER_ENABLEDISABLE' || !isModEnabled('restoauth') || empty($object->id)) {
 			return 0;
 		}
