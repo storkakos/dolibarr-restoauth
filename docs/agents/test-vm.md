@@ -144,7 +144,7 @@ $SSH "docker rm -f $RUN-lint 2>/dev/null; rm -rf $DIR"
 When `scripts/test-on-vm.sh` or a by-hand lint run died without its clean-up (Ctrl-C that did not get through, lost SSH, killed shell), the lint container and the folder of that run are still on the VM. Find it and remove them by their name, which is the bare `$RUN`; nothing else is touched:
 
 ```sh
-$SSH "docker ps -a --filter "name=^/$RUN-lint$" --format '{{.Names}} {{.Status}}'"   # what is left
+$SSH "docker ps -a --filter 'name=^/$RUN-lint\$' --format '{{.Names}} {{.Status}}'"   # what is left
 $SSH "docker rm -f $RUN-lint"                                                  # the lint container
 $SSH "rm -rf $DIR"                                                              # the folder (DIR=/root/dolibarr-restoauth-$RUN)
 ```
