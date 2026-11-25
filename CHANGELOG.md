@@ -6,6 +6,16 @@ upload.
 
 ## Unreleased
 
+## 0.3.0 - 2026-11-25
+
+Logout and fresh login through the identity provider: front-channel logout, the consent page's "Not <name>?"
+link (also through the provider's logout), `prompt=login` and `max_age`, each with its fixes.
+
+- Upgrading from 0.2.2: install the ZIP over the old version. No reactivation needed; clients, connections and
+  settings are kept, and no new constant is required. To use the new parts with Keycloak: front-channel logout
+  URL `<issuer>/frontchannel-logout.php` (README: "Front-channel logout (Keycloak)"), and for the IdP logout of
+  the "Not <name>?" link `<issuer>/consent.php*` under "Valid post logout redirect URIs" plus, if Dolibarr's
+  `MAIN_AUTHENTICATION_OIDC_LOGOUT_URL` is not set, the optional constant `RESTOAUTH_OIDC_END_SESSION_URL`.
 - Fix: `prompt=login` and `max_age` no longer miss a request sent in the same second as the last login, and
   they use this browser session's login time (stored by a new `USER_LOGIN` trigger in the PHP session), not the
   user's last login on any device. The login made for the request is never asked for again (marker in the signed

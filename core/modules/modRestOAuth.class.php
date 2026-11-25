@@ -29,7 +29,7 @@ class modRestOAuth extends DolibarrModules
 		$this->description = 'OAuth 2.1 server for the REST API (AI assistants, MCP) with login via Dolibarr/Keycloak';
 		$this->descriptionlong = 'Issues per-user REST API tokens through OAuth 2.1 (authorization code + PKCE, dynamic client registration, rotating refresh tokens, revocation).';
 		$this->editor_name = 'storkakos';
-		$this->version = '0.2.2';
+		$this->version = '0.3.0';
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		$this->picto = 'technic';
 
