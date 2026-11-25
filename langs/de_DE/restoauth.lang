@@ -19,6 +19,7 @@ RestOAuthNotAllowed = Ihr Benutzer darf keine Anwendungen verbinden (Recht "Anwe
 RestOAuthRequestInvalid = Die Anfrage ist ungültig oder abgelaufen. Bitte starten Sie die Verbindung in der Anwendung neu.
 RestOAuthRequestExpired = Diese Anfrage ist abgelaufen: Die Anfrage der Anwendung gilt %s Minuten für Anmeldung und Zustimmung. Bitte starten Sie die Verbindung in der Anwendung neu.
 RestOAuthNotYou = Nicht %s? Abmelden und anderes Konto verwenden
+RestOAuthNotYouIdpHint = Die Sitzung beim Identity Provider bleibt bestehen: Zuerst dort abmelden, sonst meldet er dieselbe Person wieder an.
 RestOAuthLoggedInSince = angemeldet seit %s
 RestOAuthAuthMode = Anmeldeverfahren: %s
 RestOAuthNoConnections = Keine verbundenen Anwendungen
@@ -40,6 +41,7 @@ RestOAuthRedirectAllowlist = Erlaubte Redirect-URIs (eine pro Zeile, * am Ende =
 RestOAuthAllowLoopback = Loopback-Redirects erlauben (http://localhost, 127.0.0.1)
 RestOAuthResources = Erlaubte Ressourcen / MCP-Server-URLs (eine pro Zeile, leer = alle)
 RestOAuthIssuer = Issuer (leer = automatisch)
+RestOAuthOidcEndSessionUrl = end_session-URL des Identity Providers (leer = aus der OIDC-Logout-URL von Dolibarr)
 RestOAuthApiInTokenTable = API-Tokens aus der Token-Tabelle (API_IN_TOKEN_TABLE)
 RestOAuthEndpoints = Endpunkte
 RestOAuthClients = Registrierte Clients

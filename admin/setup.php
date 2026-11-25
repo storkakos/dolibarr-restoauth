@@ -31,6 +31,7 @@ $settings = array(
 	'RESTOAUTH_REDIRECT_ALLOWLIST' => array('RestOAuthRedirectAllowlist', 'text'),
 	'RESTOAUTH_RESOURCES' => array('RestOAuthResources', 'text'),
 	'RESTOAUTH_ISSUER' => array('RestOAuthIssuer', 'string'),
+	'RESTOAUTH_OIDC_END_SESSION_URL' => array('RestOAuthOidcEndSessionUrl', 'string'),
 );
 
 $lifetimeBounds = restoauth_lifetime_bounds();

@@ -19,6 +19,7 @@ RestOAuthNotAllowed = Your user may not connect applications (permission "Connec
 RestOAuthRequestInvalid = The request is invalid or expired. Please start the connection again in the application.
 RestOAuthRequestExpired = This request has expired: the application's request is valid for %s minutes, for logging in and consenting. Please start the connection again in the application.
 RestOAuthNotYou = Not %s? Log out and use another account
+RestOAuthNotYouIdpHint = The identity provider session stays: log out of the identity provider first, otherwise it logs the same person in again.
 RestOAuthLoggedInSince = logged in since %s
 RestOAuthAuthMode = authentication mode: %s
 RestOAuthNoConnections = No connected applications
@@ -40,6 +41,7 @@ RestOAuthRedirectAllowlist = Allowed redirect URIs (one per line, trailing * = p
 RestOAuthAllowLoopback = Allow loopback redirects (http://localhost, 127.0.0.1)
 RestOAuthResources = Allowed resources / MCP server URLs (one per line, empty = all)
 RestOAuthIssuer = Issuer (empty = automatic)
+RestOAuthOidcEndSessionUrl = Identity provider end_session URL (empty = from Dolibarr's OIDC logout URL)
 RestOAuthApiInTokenTable = API tokens from token table (API_IN_TOKEN_TABLE)
 RestOAuthEndpoints = Endpoints
 RestOAuthClients = Registered clients
