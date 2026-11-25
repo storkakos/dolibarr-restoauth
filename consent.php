@@ -1,6 +1,6 @@
 <?php
-/* restoauth - Zustimmungsseite. Laeuft hinter der normalen Dolibarr-Anmeldung (Formular oder Keycloak/openid_connect).
- * Nach "Erlauben" wird ein einmaliger Autorisierungscode (lifetime RESTOAUTH_CODE_LIFETIME, default 120 s) erzeugt und der Browser zum Client zurueckgeschickt. */
+/* restoauth - Consent page. Runs behind Dolibarr's normal login (form or Keycloak/openid_connect).
+ * After "Allow" a one-time authorization code (lifetime RESTOAUTH_CODE_LIFETIME, default 120 s) is created and the browser is sent back to the client. */
 require __DIR__.'/lib/bootstrap.inc.php';
 
 $langs->loadLangs(array('restoauth@restoauth', 'users', 'admin'));
@@ -65,7 +65,7 @@ if ($action === 'switch' && GETPOST('restoauth_switch', 'alpha') !== '' && hash_
 	// provider's logout, the page just opens again.
 	restoauth_restart_consent($db, $req, 'consent page, other account', true);
 	header('Cache-Control: no-store');
-	header('Location: '.restoauth_issuer().'/consent.php?req='.$packed, true, 302);
+	header('Location: '.restoauth_consent_url($packed), true, 302);
 	exit;
 }
 
@@ -92,7 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'allow') {
 	$sendBack(array('code' => $code));
 }
 
-// Anzeige
+// Page
 $redirectHost = parse_url($req['redirect_uri'], PHP_URL_HOST);
 llxHeader('', $langs->trans('RestOAuthConsentTitle'));
 print load_fiche_titre($langs->trans('RestOAuthConsentTitle'), '', 'technic');
@@ -107,9 +107,9 @@ if ($req['resource'] !== '') {
 $fullName = trim($user->getFullName($langs));
 print '<tr><td>'.$langs->trans('User').'</td><td>'.dol_escape_htmltag(($fullName !== '' ? $fullName : $user->login).' ('.$user->login.')');
 if (restoauth_session_can_end()) {
-	$switchUrl = restoauth_issuer().'/consent.php?req='.$packed.'&restoauth_action=switch&restoauth_switch='.restoauth_switch_token();
+	$switchUrl = restoauth_consent_url($packed).'&restoauth_action=switch&restoauth_switch='.restoauth_switch_token();
 	print ' &nbsp; <a class="restoauth-switch" href="'.dol_escape_htmltag($switchUrl).'">'.dol_escape_htmltag($langs->transnoentities('RestOAuthNotYou', $fullName !== '' ? $fullName : $user->login)).'</a>';
-	if (restoauth_session_is_openid_connect() && restoauth_idp_end_session_url('') === '') {
+	if (restoauth_session_is_openid_connect() && !restoauth_idp_logout_available()) {
 		print '<br><span class="opacitymedium">'.dol_escape_htmltag($langs->transnoentities('RestOAuthNotYouIdpHint')).'</span>';
 	}
 }

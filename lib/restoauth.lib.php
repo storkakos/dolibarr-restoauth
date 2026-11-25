@@ -1,23 +1,23 @@
 <?php
 /* restoauth - OAuth 2.1 authorization server for the Dolibarr REST API
- * Gemeinsame Funktionen fuer alle Endpunkte.
+ * Shared functions of all endpoints.
  *
  * Tokens:
- *  - Access Token: Zufallswert, liegt verschluesselt (dolEncrypt, fester Seed wie im Kern) in llx_oauth_token,
- *    service 'dolibarr_rest_api', state 'restoauth:<family_id>', expire_at = jetzt + Laufzeit.
- *  - Dolibarr 23.0.3: Die Token-Tabelle des Kerns (API_IN_TOKEN_TABLE=1) ist dort defekt (SQL-Fehler "rowid ambiguous"
- *    in api_access.class.php, behoben in 24). Deshalb bildet der Hook beforeApiCall einen gueltigen Access Token vor der
- *    Kernpruefung auf den internen API-Schluessel des Benutzers (llx_user.api_key) ab. Der Kern prueft dann Benutzer,
- *    Status und Rechte wie immer. Abgelaufene oder widerrufene Tokens weist der Hook ab bzw. kennt der Kern nicht.
- *    Mit API_IN_TOKEN_TABLE=1 (ab Dolibarr 24) entfaellt die Abbildung, der Kern liest die Tabelle selbst.
- *  - Refresh Token, Autorisierungscode, Client-Secret: nur als sha256 in den Tabellen des Moduls.
+ *  - Access token: random value, stored encrypted (dolEncrypt, fixed seed as in the core) in llx_oauth_token,
+ *    service 'dolibarr_rest_api', state 'restoauth:<family_id>', expire_at = now + lifetime.
+ *  - Dolibarr 23.0.3: the core's token table (API_IN_TOKEN_TABLE=1) is broken there (SQL error "rowid ambiguous"
+ *    in api_access.class.php, fixed in 24). So the hook beforeApiCall maps a valid access token, before the core's
+ *    check, to the user's internal API key (llx_user.api_key). The core then checks user, status and rights as
+ *    always. The hook refuses expired or revoked tokens; the core does not know them.
+ *    With API_IN_TOKEN_TABLE=1 (from Dolibarr 24) the mapping is not needed, the core reads the table itself.
+ *  - Refresh token, authorization code, client secret: only as sha256 in the module's tables.
  */
 
-/** Praefix im Feld state von llx_oauth_token, damit nur eigene Tokens angefasst werden */
+/** Prefix in the field state of llx_oauth_token, so that only the module's own tokens are touched */
 define('RESTOAUTH_STATE_PREFIX', 'restoauth:');
 
 /**
- * Issuer = Basis-URL des Moduls (ohne Slash am Ende)
+ * Issuer = base URL of the module (no trailing slash)
  *
  * @return string
  */
@@ -31,7 +31,7 @@ function restoauth_issuer()
 }
 
 /**
- * Metadaten nach RFC 8414
+ * Metadata as in RFC 8414
  *
  * @return array<string,mixed>
  */
@@ -58,11 +58,11 @@ function restoauth_metadata()
 }
 
 /**
- * JSON ausgeben und beenden
+ * Send JSON and end the request
  *
- * @param int                 $status  HTTP-Status
- * @param array<string,mixed> $data    Inhalt
- * @param array<string>       $headers zusaetzliche Header
+ * @param int                 $status  HTTP status
+ * @param array<string,mixed> $data    Body
+ * @param array<string>       $headers Additional headers
  * @return never
  */
 function restoauth_json($status, $data, $headers = array())
@@ -79,11 +79,11 @@ function restoauth_json($status, $data, $headers = array())
 }
 
 /**
- * OAuth-Fehler (RFC 6749 5.2) ausgeben
+ * Send an OAuth error (RFC 6749 5.2)
  *
- * @param int    $status HTTP-Status
- * @param string $error  Fehlercode
- * @param string $desc   Beschreibung
+ * @param int    $status HTTP status
+ * @param string $error  Error code
+ * @param string $desc   Description
  * @return never
  */
 function restoauth_error($status, $error, $desc = '')
@@ -100,7 +100,7 @@ function restoauth_error($status, $error, $desc = '')
 }
 
 /**
- * CORS fuer die oeffentlichen JSON-Endpunkte (Browser-Clients, MCP Inspector)
+ * CORS for the public JSON endpoints (browser clients, MCP Inspector)
  *
  * @return void
  */
@@ -116,9 +116,9 @@ function restoauth_cors()
 }
 
 /**
- * Zufallswert, base64url ohne Padding
+ * Random value, base64url without padding
  *
- * @param int $bytes Anzahl Bytes
+ * @param int $bytes Number of bytes
  * @return string
  */
 function restoauth_random($bytes = 32)
@@ -127,7 +127,7 @@ function restoauth_random($bytes = 32)
 }
 
 /**
- * @param string $value Wert
+ * @param string $value Value
  * @return string sha256 hex
  */
 function restoauth_hash($value)
@@ -136,7 +136,7 @@ function restoauth_hash($value)
 }
 
 /**
- * Schluessel fuer die Signatur der Autorisierungsanfrage (aus der Instanz-ID abgeleitet)
+ * Key for the signature of the authorization request (derived from the instance ID)
  *
  * @return string
  */
@@ -347,26 +347,47 @@ function restoauth_restart_consent($db, $req, $why, $viaIdp = false)
 		$req['forced'] = 1;
 	}
 	$packed = restoauth_pack_request($req, (int) $req['exp']);
-	$returnUrl = restoauth_issuer().'/consent.php?req='.$packed;
-	$goTo = $returnUrl;
-	if ($viaIdp && restoauth_session_is_openid_connect()) {
-		$idpUrl = restoauth_idp_end_session_url($returnUrl);
-		if ($idpUrl !== '') {
-			$goTo = $idpUrl;
-		}
-	}
+	$returnUrl = restoauth_consent_url($packed);
+	$goTo = $viaIdp && restoauth_idp_logout_available() ? restoauth_idp_end_session_url($returnUrl) : $returnUrl;
 	if (!restoauth_end_session($db, $why.($goTo !== $returnUrl ? ' and identity provider' : ''))) {
 		return false;
 	}
 	// Before the IdP hop the cookie is set to this page, not just deleted: Keycloak's front-channel iframe
 	// can load user/logout.php (no session) and its login page would store that URL as the way back.
-	$rel = (string) parse_url($returnUrl, PHP_URL_PATH).'?req='.$packed;
+	// Dolibarr 23's login page (core/tpl/login.tpl.php) stores $_SERVER['REQUEST_URI'] there, and its openid_connect
+	// callback (core/modules/openid_connect/callback.php) posts to the stored value as it is, prefixing nothing. So
+	// the value is built the way Dolibarr builds its own URLs (DOL_URL_ROOT, a sub-path included once), not from
+	// RESTOAUTH_ISSUER, whose path may be a public one that a proxy rewrites.
+	$rel = dol_buildpath('/restoauth/consent.php', 1).'?req='.$packed;
 	if ($goTo === $returnUrl || !restoauth_set_login_return($rel)) {
 		restoauth_forget_login_return();
 	}
 	header('Cache-Control: no-store');
 	header('Location: '.$goTo, true, 302);
 	exit;
+}
+
+/**
+ * URL of the consent page for a packed consent request (under the issuer, the URL the browser uses).
+ *
+ * @param string $packed Value from restoauth_pack_request
+ * @return string
+ */
+function restoauth_consent_url($packed)
+{
+	return restoauth_issuer().'/consent.php?req='.$packed;
+}
+
+/**
+ * Can the "Not <name>?" link also end the identity provider's session? Only for a session from openid_connect
+ * and only if the provider's end_session endpoint and Dolibarr's client id are known (restoauth_idp_end_session_url).
+ * Call before restoauth_end_session(), which destroys the session.
+ *
+ * @return bool
+ */
+function restoauth_idp_logout_available()
+{
+	return restoauth_session_is_openid_connect() && restoauth_idp_end_session_url('-') !== '';
 }
 
 /**
@@ -438,7 +459,11 @@ function restoauth_set_login_return($relativeUrl)
 	if (!preg_match('/^\/[a-z0-9]/i', (string) $relativeUrl) || strpbrk($relativeUrl, "\r\n") !== false) {
 		return false;
 	}
-	$https = function_exists('isHTTPS') ? isHTTPS() : (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+	global $dolibarr_main_force_https;
+
+	// Secure as in Dolibarr's own dolSetCookie(): also when Dolibarr is set to force https ($dolibarr_main_force_https,
+	// for a TLS proxy that does not tell PHP), not only when isHTTPS() sees https.
+	$https = !empty($dolibarr_main_force_https) || isHTTPS();
 	header('Set-Cookie: DOL_rollback_url_'.dol_getprefix('').'='.rawurlencode($relativeUrl).'; Max-Age=3600; Path=/; HttpOnly; SameSite=Lax'.($https ? '; Secure' : ''), false);
 	return true;
 }
@@ -460,9 +485,9 @@ function restoauth_forget_login_return()
 }
 
 /**
- * Liste aus einer mehrzeiligen Konstante
+ * List from a multi-line (or comma-separated) constant
  *
- * @param string $name Konstante
+ * @param string $name Constant
  * @return string[]
  */
 function restoauth_const_list($name)
@@ -478,7 +503,7 @@ function restoauth_const_list($name)
 }
 
 /**
- * Darf diese Redirect-URI registriert werden? (Allowlist, optional Loopback)
+ * May this redirect URI be registered? (allowlist, optionally loopback)
  *
  * @param string $uri URI
  * @return bool
@@ -507,9 +532,9 @@ function restoauth_redirect_allowed($uri)
 }
 
 /**
- * Ist die Ressource (RFC 8707) erlaubt? Leere Liste = alle.
+ * Is the resource (RFC 8707) allowed? Empty list = all.
  *
- * @param string $resource URL des MCP-Servers
+ * @param string $resource URL of the MCP server
  * @return bool
  */
 function restoauth_resource_allowed($resource)
@@ -527,9 +552,9 @@ function restoauth_resource_allowed($resource)
 }
 
 /**
- * Client per client_id laden
+ * Load a client by client_id
  *
- * @param DoliDB $db       Datenbank
+ * @param DoliDB $db       Database
  * @param string $clientId client_id
  * @return object|null
  */
@@ -549,10 +574,10 @@ function restoauth_get_client($db, $clientId)
 }
 
 /**
- * Client am Token-/Revoke-Endpunkt authentifizieren (none, client_secret_post, client_secret_basic)
+ * Authenticate the client at the token / revoke endpoint (none, client_secret_post, client_secret_basic)
  *
- * @param DoliDB $db Datenbank
- * @return object Client (bricht mit invalid_client ab)
+ * @param DoliDB $db Database
+ * @return object Client (ends the request with invalid_client otherwise)
  */
 function restoauth_authenticate_client($db)
 {
@@ -593,9 +618,9 @@ function restoauth_authenticate_client($db)
 }
 
 /**
- * Darf dieser Benutzer eine Anwendung verbinden? (aktiv, gueltig, Recht restoauth->connect)
+ * May this user connect an application? (enabled, within validity dates, right restoauth->connect)
  *
- * @param User $u Benutzer (mit geladenen Rechten)
+ * @param User $u User (with rights loaded)
  * @return bool
  */
 function restoauth_user_may_connect($u)
@@ -607,9 +632,9 @@ function restoauth_user_may_connect($u)
 }
 
 /**
- * Benutzer laden und pruefen
+ * Load and check a user
  *
- * @param DoliDB $db     Datenbank
+ * @param DoliDB $db     Database
  * @param int    $userId ID
  * @return User|null
  */
@@ -625,16 +650,16 @@ function restoauth_load_user($db, $userId)
 }
 
 /**
- * Neues Token-Paar ausgeben (neue oder bestehende Familie)
+ * Issue a new token pair (new or existing family)
  *
- * @param DoliDB      $db          Datenbank
+ * @param DoliDB      $db          Database
  * @param object      $client      Client
- * @param User        $u           Benutzer
+ * @param User        $u           User
  * @param string      $resource    Ressource
  * @param string      $scope       Scope
- * @param string|null $familyId    bestehende Familie (Refresh) oder null
- * @param int|null    $familyDatec Beginn der Familie
- * @return array<string,mixed> Token-Antwort (RFC 6749 5.1)
+ * @param string|null $familyId    Existing family (refresh) or null
+ * @param int|null    $familyDatec Start of the family
+ * @return array<string,mixed> Token response (RFC 6749 5.1)
  */
 function restoauth_issue_tokens($db, $client, $u, $resource, $scope, $familyId = null, $familyDatec = null)
 {
@@ -685,10 +710,10 @@ function restoauth_issue_tokens($db, $client, $u, $resource, $scope, $familyId =
 }
 
 /**
- * Verbindung (Familie) widerrufen: Refresh-Tokens sperren, Access Tokens loeschen
+ * Revoke a connection (family): lock its refresh tokens, delete its access tokens
  *
- * @param DoliDB $db       Datenbank
- * @param string $familyId Familie
+ * @param DoliDB $db       Database
+ * @param string $familyId Family
  * @return void
  */
 function restoauth_revoke_family($db, $familyId)
@@ -712,9 +737,9 @@ function restoauth_revoke_user($db, $userId)
 }
 
 /**
- * Access-Token-Datensatz zu einem Klartext-Token (nur eigene Tokens)
+ * Access token record for a plain-text token (only the module's own tokens)
  *
- * @param DoliDB $db    Datenbank
+ * @param DoliDB $db    Database
  * @param string $token Token
  * @return object|null rowid, fk_user, entity, state, expire_at (Timestamp)
  */
@@ -736,14 +761,14 @@ function restoauth_find_access_token($db, $token)
 }
 
 /**
- * Bearer-Token / DOLAPIKEY aus der Anfrage (wie DolibarrApiAccess)
+ * Bearer token / DOLAPIKEY of the request (as DolibarrApiAccess reads it)
  *
  * @return string
  */
 function restoauth_request_api_key()
 {
 	if (!empty($GLOBALS['restoauth_original_key'])) {
-		return (string) $GLOBALS['restoauth_original_key'];   // vom Hook ersetzt: urspruenglicher OAuth-Token
+		return (string) $GLOBALS['restoauth_original_key'];   // replaced by the hook: the original OAuth token
 	}
 	$key = '';
 	if (isset($_SERVER['HTTP_DOLAPIKEY'])) {
@@ -760,13 +785,13 @@ function restoauth_request_api_key()
 }
 
 /**
- * Interner API-Schluessel des Benutzers (llx_user.api_key), bei Bedarf anlegen. Er verlaesst Dolibarr nie;
- * der Hook beforeApiCall setzt ihn nur fuer die Dauer einer API-Anfrage mit gueltigem OAuth-Token ein.
+ * The user's internal API key (llx_user.api_key), created if needed. It never leaves Dolibarr; the hook
+ * beforeApiCall uses it only for the duration of an API request with a valid OAuth token.
  *
- * @param DoliDB $db     Datenbank
- * @param int    $userId Benutzer
- * @param bool   $create anlegen, falls leer
- * @return string Klartext oder ''
+ * @param DoliDB $db     Database
+ * @param int    $userId User
+ * @param bool   $create Create it if empty
+ * @return string Plain text or ''
  */
 function restoauth_user_internal_key($db, $userId, $create = false)
 {
@@ -787,10 +812,10 @@ function restoauth_user_internal_key($db, $userId, $create = false)
 }
 
 /**
- * Abgelaufene Tokens und Codes entfernen (Cron und nebenbei am Token-Endpunkt)
+ * Remove expired tokens and codes (cron job, and in passing at the token endpoint)
  *
- * @param DoliDB $db Datenbank
- * @return int Anzahl geloeschter Access Tokens
+ * @param DoliDB $db Database
+ * @return int Number of deleted access tokens
  */
 function restoauth_cleanup($db)
 {
@@ -801,15 +826,15 @@ function restoauth_cleanup($db)
 		$n = $db->affected_rows($res);
 	}
 	$db->query("DELETE FROM ".$db->prefix()."restoauth_code WHERE expire_at < ".$now);
-	// Familien, deren letzter Refresh-Token abgelaufen ist, komplett entfernen
+	// Remove families whose last refresh token has expired
 	$db->query("DELETE FROM ".$db->prefix()."restoauth_refresh WHERE family_id IN (SELECT family_id FROM (SELECT family_id FROM ".$db->prefix()."restoauth_refresh GROUP BY family_id HAVING MAX(expire_at) < ".$now.") AS t)");
 	return $n;
 }
 
 /**
- * Rechte des Benutzers als flache Liste "modul.recht" bzw. "modul.objekt.recht"
+ * The user's rights as a flat list "module.right" or "module.object.right"
  *
- * @param User $u Benutzer mit geladenen Rechten
+ * @param User $u User with rights loaded
  * @return string[]
  */
 function restoauth_flatten_rights($u)
@@ -830,12 +855,12 @@ function restoauth_flatten_rights($u)
 }
 
 /**
- * Rechte mit lesbarer Bezeichnung (fuer die Zustimmungsseite), gruppiert nach Modul
+ * Rights with readable labels (for the consent page), grouped by module
  *
- * @param DoliDB    $db    Datenbank
- * @param Translate $langs Sprachen
- * @param User      $u     Benutzer
- * @return array<string,string[]> Modul => Bezeichnungen
+ * @param DoliDB    $db    Database
+ * @param Translate $langs Languages
+ * @param User      $u     User
+ * @return array<string,string[]> Module => labels
  */
 function restoauth_rights_labels($db, $langs, $u)
 {
@@ -862,6 +887,9 @@ function restoauth_rights_labels($db, $langs, $u)
 /**
  * Token for the "Not you?" link of the consent page. It is bound to the PHP session and the user, and stays the same
  * while the session loads other Dolibarr pages (Dolibarr's own page token changes with every page load).
+ * It does not expire within the session and is not bound to the consent request, on purpose: all it allows is to end
+ * this user's own session in this browser (logout CSRF protection), it dies with the session, and binding it to
+ * "req" would add nothing, as the link carries req and the token together.
  *
  * @return string
  */

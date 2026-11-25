@@ -6,6 +6,13 @@ upload.
 
 ## Unreleased
 
+- Fix: before the identity provider's logout ("Not <name>?" link), the login return cookie `DOL_rollback_url_*`
+  now holds the consent page's path as Dolibarr builds it (with Dolibarr's own sub-path), not the path of
+  `RESTOAUTH_ISSUER`, which can be a public path a proxy rewrites. The cookie gets `Secure` also when Dolibarr is
+  set to force https behind a TLS proxy (as Dolibarr's own cookies). No reactivation needed.
+- Front-channel logout writes the login and authentication mode of a session it leaves alone to the log only as
+  plain characters. Code comments of the shared library are in English; small cleanups on the consent page.
+
 ## 0.3.0 - 2026-11-25
 
 Logout and fresh login through the identity provider: front-channel logout, the consent page's "Not <name>?"
