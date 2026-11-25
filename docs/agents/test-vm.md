@@ -37,8 +37,9 @@ The script does the steps below for you: it copies the working tree to
 `/root/dolibarr-restoauth-$RUN`, runs `scripts/lint-php.sh` there (container `$RUN-lint`), prints
 the output, removes the folder and the container again, also on failure or Ctrl-C, and exits with
 the lint's exit code. It refuses to start if the folder already exists, so it never touches
-another run. Without `RUN` it picks a random `dev-<hex>` name. The lint needs no port. `VM_HOST`,
-`VM_KEY` and `VM_KNOWN_HOSTS` override the connection settings in the table above.
+another run. If the VM cannot be reached, it stops with ssh's error and exit code 255. Without
+`RUN` it picks a random `dev-<hex>` name. The lint needs no port. `VM_HOST`, `VM_KEY` and
+`VM_KNOWN_HOSTS` override the connection settings in the table above.
 
 The sections below are the manual steps, for debugging.
 
