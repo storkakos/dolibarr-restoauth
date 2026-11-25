@@ -8,7 +8,7 @@ repos use.
 | --- | --- |
 | Host | `192.168.178.25` (only reachable from the maintainer's network) |
 | User | `root` |
-| OS | Debian 13 (trixie), Docker 29, Compose v5, 4 CPUs, 12 GB RAM minimum with ballooning (about 11 GB visible), no swap, 59 GB root disk |
+| OS | Debian 13 (trixie), Docker 29.10, Compose v5.8, 4 CPUs, 12 GB RAM minimum with ballooning (15.5 GB visible on 2026-11-25; the visible amount changes), no swap, 59 GB root disk (about 20 GB used) |
 | Private key | `~/.ssh/itop-mcp-test-vm` (on the maintainer's machine, **never commit it**) |
 | Host key | `~/.ssh/itop-mcp-test-vm.known_hosts` |
 
@@ -88,6 +88,7 @@ This section is `vm-runner`'s job (see [Only `vm-runner` uses the VM](#only-vm-r
 - A **ticket stack** is a full test stack started for one ticket under its own RUN name. Starting one takes a **VM slot**.
 - This repo starts no ticket stack (the PHP lint is one small container), but these rules hold for everyone on the VM.
 - At most 3 ticket stacks run at the same time. Start one only if at least 3 GB are available: `$SSH "free -m | awk '/^Mem:/{print \$7}'"` must print 3072 or more. If not, wait or ask the orchestrator.
+- `scripts/stack-on-vm.sh` (in the other repos) keeps this rule for you: a **slot** is a lease file `/var/lib/test-vm-slots/<repo>-<RUN>.lease`, taken under `flock` on `/var/lib/test-vm-slots/.lock` only while fewer than 3 leases exist and at least 3072 MB are available; otherwise it waits and says why. The folder is shared by every repo that uses the VM, so the limit counts all their stacks together. A lease whose run folder is gone for 15 minutes, or that is older than 3 hours, counts as left over by a killed run and is dropped. When you start a stack by hand, take a slot the same way or count the leases yourself.
 - Take your stack down right after the run, also when it failed: `docker compose -p $RUN down -v --remove-orphans`, then remove your images (see Clean up).
 - Never stop, change or read stacks, folders or files you did not create, including other stacks' `.env` and key files. Some stacks on the VM run permanently on purpose.
 
@@ -116,6 +117,11 @@ git ls-files -z --cached --others --exclude-standard | tar --null -T - -cf - \
 `.gitattributes` gives PHP, SQL, shell and the other text files LF line endings, also on Windows
 with `core.autocrlf=true`, so the copy runs on Linux as-is.
 
+The copy has no `.git` folder (`scripts/test-on-vm.sh` copies the same way). What does not work because of that:
+
+- Every `git` command in the VM folder fails (`not a git repository`): no `git status`, `diff` or `log` there. Do your git work on the dev machine and copy the result over.
+- Git-ignored files are not copied either: put nothing a run needs into a git-ignored file.
+
 ## Run the PHP lint
 
 ```sh
@@ -132,6 +138,18 @@ Remove only what you created yourself:
 ```sh
 $SSH "docker rm -f $RUN-lint 2>/dev/null; rm -rf $DIR"
 ```
+
+### A lint run killed halfway
+
+When `scripts/test-on-vm.sh` or a by-hand lint run died without its clean-up (Ctrl-C that did not get through, lost SSH, killed shell), the lint container and the folder of that run are still on the VM. Find it and remove them by their name, which is the bare `$RUN`; nothing else is touched:
+
+```sh
+$SSH "docker ps -a --filter name=$RUN-lint --format '{{.Names}} {{.Status}}'"   # what is left
+$SSH "docker rm -f $RUN-lint"                                                  # the lint container
+$SSH "rm -rf /root/dolibarr-restoauth-$RUN"                                    # the folder
+```
+
+Check afterwards that the first command prints nothing. Use exactly your own `$RUN`: a prefix match would hit other runs.
 
 Keep the shared things in place, even if they look unused: the `php:8.3-cli` and
 `python:3.13-slim` images and other runs' images, containers, networks and folders. Never run
