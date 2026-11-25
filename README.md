@@ -139,7 +139,7 @@ Issuer: `<dolibarr>/custom/restoauth`
 | Address | Purpose |
 | --- | --- |
 | `metadata.php`, `/.well-known/oauth-authorization-server/custom/restoauth` | Authorization server metadata (RFC 8414) |
-| `authorize.php` | Authorization endpoint (`response_type=code` only, PKCE S256 required, `resource` per RFC 8707) |
+| `authorize.php` | Authorization endpoint (`response_type=code` only, PKCE S256 required, `resource` per RFC 8707; `prompt=login` and `max_age` force a new login, see [Consent page](#consent-page)) |
 | `consent.php` | Consent page behind the normal Dolibarr login; lists the rights the assistant will act with and offers to log out and use another account, see [Consent page](#consent-page) |
 | `token.php` | Grants `authorization_code` and `refresh_token`; client authentication `none`, `client_secret_post`, `client_secret_basic` |
 | `register.php` | Dynamic client registration (RFC 7591), redirect URIs from the allowlist only |
@@ -175,6 +175,18 @@ login returns to the consent page and not to an older page.
 The request behind the page (`req`) is valid for `RESTOAUTH_CONSENT_REQUEST_LIFETIME` (see
 [Lifetimes](#lifetimes)), including the new login. If it has expired, the page says so and asks to
 start the connection again in the application.
+
+**`prompt=login` and `max_age`.** A client can ask for a fresh login with the authorization request
+parameters `prompt=login` (also inside a list such as `prompt=login consent`) or `max_age=<seconds>`
+(`max_age=0` equals `prompt=login`; a value that is not a number answers `invalid_request`). If the
+browser has a Dolibarr session that began before the request and, for `max_age`, is older than that, the
+consent page ends it the same way as the link above and returns to the same request, so the person logs in
+again before seeing the consent. A session younger than `max_age`, or a login made after the request,
+is used as it is. Without these parameters nothing changes. The login time is the user's last login
+date in Dolibarr, so it is the Dolibarr login, not the identity provider's. In the modes `http` and
+`forceuser` the session cannot be ended and the request goes on. With an identity provider such as
+Keycloak the new Dolibarr login can still be a silent single sign-on (see Limit below). The discovery
+metadata does not list these parameters (RFC 8414 has no field for them).
 
 Limit: with a login through an identity provider such as Keycloak, the link ends only the Dolibarr
 session. If the provider's session in this browser still belongs to the previous person, the provider

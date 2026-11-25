@@ -33,6 +33,23 @@ $sendBack = function ($params) use ($req) {
 	exit;
 };
 
+// prompt=login / max_age of the authorization request (see authorize.php): a session that is older than the request
+// (login time before "iat") and is not recent enough is ended, and the browser comes back to this same request.
+// The login time is the user's datelastlogin, which Dolibarr sets at every new login (password form and
+// openid_connect alike). After the new login it is >= iat, so the request passes and there is no loop. Sessions
+// that cannot be ended (auth mode http / forceuser) are left alone.
+if (!empty($req['login']) || isset($req['max_age'])) {
+	$loginAt = (int) $user->datelastlogin;
+	$iat = isset($req['iat']) ? (int) $req['iat'] : 0;
+	$stale = !empty($req['login']) || (dol_now() - $loginAt) > (int) $req['max_age'];
+	if ($loginAt < $iat && $stale && restoauth_end_session($db, 'consent page, '.(!empty($req['login']) ? 'prompt=login' : 'max_age'))) {
+		restoauth_forget_login_return();
+		header('Cache-Control: no-store');
+		header('Location: '.restoauth_issuer().'/consent.php?req='.$packed, true, 302);
+		exit;
+	}
+}
+
 $mayConnect = restoauth_user_may_connect($user);
 $action = GETPOST('restoauth_action', 'aZ09');
 
