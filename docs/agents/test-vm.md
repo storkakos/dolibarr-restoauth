@@ -87,8 +87,8 @@ This section is `vm-runner`'s job (see [Only `vm-runner` uses the VM](#only-vm-r
 
 - A **ticket stack** is a full test stack started for one ticket under its own RUN name. Starting one takes a **VM slot**.
 - This repo starts no ticket stack (the PHP lint is one small container), but these rules hold for everyone on the VM.
-- At most 3 ticket stacks run at the same time. Start one only if at least 3 GB are available: `$SSH "free -m | awk '/^Mem:/{print \$7}'"` must print 3072 or more. If not, wait or ask the orchestrator.
-- `scripts/stack-on-vm.sh` (in the other repos) keeps this rule for you: a **slot** is a lease file `/var/lib/test-vm-slots/<repo>-<RUN>.lease`, taken under `flock` on `/var/lib/test-vm-slots/.lock` only while fewer than 3 leases exist and at least 3072 MB are available; otherwise it waits and says why. The folder is shared by every repo that uses the VM, so the limit counts all their stacks together. A lease whose run folder is gone for 15 minutes, or that is older than 3 hours, counts as left over by a killed run and is dropped. When you start a stack by hand, take a slot the same way or count the leases yourself.
+- At most 6 ticket stacks run at the same time, and only while at least 3 GB RAM are available. Start one only if at least 3 GB are available: `$SSH "free -m | awk '/^Mem:/{print \$7}'"` must print 3072 or more. If not, wait or ask the orchestrator.
+- `scripts/stack-on-vm.sh` (in the other repos) keeps this rule for you: a **slot** is a lease file `/var/lib/test-vm-slots/<repo>-<RUN>.lease`, taken under `flock` on `/var/lib/test-vm-slots/.lock` only while fewer than 6 leases exist (`VM_SLOT_MAX`) and at least 3072 MB are available (`free -m`, column available; `VM_SLOT_MIN_MB`); otherwise it waits and says why, and after `VM_SLOT_TIMEOUT` it refuses to start the stack (exit 4). It never starts a stack below the RAM limit. The folder is shared by every repo that uses the VM, so the limit counts all their stacks together. A lease whose run folder is gone for 15 minutes, or that is older than 3 hours, counts as left over by a killed run and is dropped. When you start a stack by hand, take a slot the same way or count the leases yourself.
 - Take your stack down right after the run, also when it failed: `docker compose -p $RUN down -v --remove-orphans`, then remove your images (see Clean up).
 - Never stop, change or read stacks, folders or files you did not create, including other stacks' `.env` and key files. Some stacks on the VM run permanently on purpose.
 
@@ -144,12 +144,12 @@ $SSH "docker rm -f $RUN-lint 2>/dev/null; rm -rf $DIR"
 When `scripts/test-on-vm.sh` or a by-hand lint run died without its clean-up (Ctrl-C that did not get through, lost SSH, killed shell), the lint container and the folder of that run are still on the VM. Find it and remove them by their name, which is the bare `$RUN`; nothing else is touched:
 
 ```sh
-$SSH "docker ps -a --filter name=$RUN-lint --format '{{.Names}} {{.Status}}'"   # what is left
+$SSH "docker ps -a --filter "name=^/$RUN-lint$" --format '{{.Names}} {{.Status}}'"   # what is left
 $SSH "docker rm -f $RUN-lint"                                                  # the lint container
-$SSH "rm -rf /root/dolibarr-restoauth-$RUN"                                    # the folder
+$SSH "rm -rf $DIR"                                                              # the folder (DIR=/root/dolibarr-restoauth-$RUN)
 ```
 
-Check afterwards that the first command prints nothing. Use exactly your own `$RUN`: a prefix match would hit other runs.
+Check afterwards that the first command prints nothing. The filter is an exact match (`^/` and `$` anchor the name); a plain `--filter name=$RUN-lint` matches by substring and would also list other runs (RUN `ab` lists `xab-lint`).
 
 Keep the shared things in place, even if they look unused: the `php:8.3-cli` and
 `python:3.13-slim` images and other runs' images, containers, networks and folders. Never run
