@@ -39,41 +39,8 @@ function restoauth_frontchannel_done()
 	exit;
 }
 
-if (!isModEnabled('restoauth') || session_status() !== PHP_SESSION_ACTIVE || empty($_SESSION['dol_login'])) {
-	restoauth_frontchannel_done();
+if (isModEnabled('restoauth')) {
+	// Sessions of the authentication modes http and forceuser are left alone (see restoauth_session_can_end).
+	restoauth_end_session($db, 'front-channel logout');
 }
-
-// Sessions of the authentication modes http and forceuser are not ended by Dolibarr's logout either
-// (user/logout.php stops with a message); the next request would log in again at once.
-$restoauthAuthmode = empty($_SESSION['dol_authmode']) ? '' : $_SESSION['dol_authmode'];
-if (in_array($restoauthAuthmode, array('forceuser', 'http'), true)) {
-	restoauth_frontchannel_done();
-}
-
-// NOLOGIN: main.inc.php has not loaded the session's user. Load it for the trigger and the hooks.
-$restoauthLogin = (string) $_SESSION['dol_login'];
-$restoauthEntity = empty($_SESSION['dol_entity']) ? 0 : (int) $_SESSION['dol_entity'];
-if (empty($user->id) || $user->login !== $restoauthLogin) {
-	$user = new User($db);
-	if ($user->fetch(0, $restoauthLogin, '', 1, ($restoauthEntity > 0 ? $restoauthEntity : -1)) <= 0) {
-		dol_syslog('restoauth: front-channel logout, user '.$restoauthLogin.' of the session not found', LOG_WARNING);
-	}
-}
-
-if ($user->id > 0) {
-	$result = $user->call_trigger('USER_LOGOUT', $user);
-	if ($result < 0) {
-		dol_syslog('restoauth: front-channel logout, trigger USER_LOGOUT failed for '.$restoauthLogin, LOG_WARNING);
-	}
-	$action = '';
-	$hookmanager->initHooks(array('logout'));
-	$reshook = $hookmanager->executeHooks('afterLogout', array(), $user, $action);
-	if ($reshook < 0) {
-		dol_syslog('restoauth: front-channel logout, hook afterLogout failed for '.$restoauthLogin, LOG_WARNING);
-	}
-}
-
-dol_syslog('restoauth: front-channel logout of '.$restoauthLogin.', end of session '.session_id(), LOG_NOTICE);
-unset($_SESSION['dol_login'], $_SESSION['dol_entity'], $_SESSION['urlfrom']);
-session_destroy();
 restoauth_frontchannel_done();

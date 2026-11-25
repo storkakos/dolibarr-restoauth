@@ -11,6 +11,12 @@ upload.
   redirect, never shows the login page and sets no cookie. Used instead of Dolibarr's
   `user/logout.php`, it avoids that the next Keycloak login after Dolibarr's own Logout ends on the
   logout page (cookie `DOL_rollback_url_*`). No new constants; no reactivation needed.
+- The consent page shows "Not <name>? Log out and use another account" next to the user, and since
+  when and how that account is logged in (README: "Consent page"). The link ends the Dolibarr session
+  like Dolibarr's own Logout and returns to the same consent request, so a second person in the same
+  browser can log in as themselves. An expired consent request now says that it expired instead of
+  "invalid or expired". The front-channel logout endpoint and the link share one function that ends
+  the session. No new constants; no reactivation needed.
 
 ## 0.2.2 - 2026-11-24
 

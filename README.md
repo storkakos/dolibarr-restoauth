@@ -22,13 +22,14 @@ have to be created or copied, and **no Dolibarr core code is changed**.
 3. [Configure Dolibarr](#configure-dolibarr)
 4. [Rewrite rules for discovery](#rewrite-rules-for-discovery)
 5. [Endpoints](#endpoints)
-6. [Front-channel logout (Keycloak)](#front-channel-logout-keycloak)
-7. [Lifetimes](#lifetimes)
-8. [How the REST API accepts the token (Dolibarr 23)](#how-the-rest-api-accepts-the-token-dolibarr-23)
-9. [Tables](#tables)
-10. [Security notes](#security-notes)
-11. [Licence](#licence)
-12. [Development](#development)
+6. [Consent page](#consent-page)
+7. [Front-channel logout (Keycloak)](#front-channel-logout-keycloak)
+8. [Lifetimes](#lifetimes)
+9. [How the REST API accepts the token (Dolibarr 23)](#how-the-rest-api-accepts-the-token-dolibarr-23)
+10. [Tables](#tables)
+11. [Security notes](#security-notes)
+12. [Licence](#licence)
+13. [Development](#development)
 
 ## Prerequisites
 
@@ -139,7 +140,7 @@ Issuer: `<dolibarr>/custom/restoauth`
 | --- | --- |
 | `metadata.php`, `/.well-known/oauth-authorization-server/custom/restoauth` | Authorization server metadata (RFC 8414) |
 | `authorize.php` | Authorization endpoint (`response_type=code` only, PKCE S256 required, `resource` per RFC 8707) |
-| `consent.php` | Consent page behind the normal Dolibarr login; lists the rights the assistant will act with |
+| `consent.php` | Consent page behind the normal Dolibarr login; lists the rights the assistant will act with and offers to log out and use another account, see [Consent page](#consent-page) |
 | `token.php` | Grants `authorization_code` and `refresh_token`; client authentication `none`, `client_secret_post`, `client_secret_basic` |
 | `register.php` | Dynamic client registration (RFC 7591), redirect URIs from the allowlist only |
 | `revoke.php` | Token revocation (RFC 7009); ends the whole connection |
@@ -154,6 +155,32 @@ second one exists because Dolibarr's Swagger explorer does not run the module's 
 `rights_map.json` lists which Dolibarr rights a REST path needs where the default rule (first path
 segment = module, `GET` → `lire`/`read`) does not apply. It was read from the `api_*.class.php`
 files of Dolibarr 23.0.3.
+
+## Consent page
+
+`consent.php` runs behind the normal Dolibarr login and takes the Dolibarr session the browser already
+has. It names the application, the host it returns to, the resource (MCP server) and the account:
+**User** `<full name> (<login>)`, below it since when that account is logged in and the
+authentication mode (for example `openid_connect`), then the rights the application will get.
+
+Next to the user, the link **Not <name>? Log out and use another account** is for a second person in
+the same browser who finds someone else's session. It ends the Dolibarr session the way Dolibarr's own
+Logout does (trigger `USER_LOGOUT`, hooks `afterLogout`, the PHP session is destroyed) and sends the
+browser back to the same consent page for the same request. Dolibarr then shows its login page, and
+after the login the consent page shows the new account. The link carries the page's CSRF token; it is
+not shown for the authentication modes `http` and `forceuser`, whose sessions Dolibarr's Logout does
+not end either. It also deletes the cookie `DOL_rollback_url_*`, so that Dolibarr's `openid_connect`
+login returns to the consent page and not to an older page.
+
+The request behind the page (`req`) is valid for `RESTOAUTH_CONSENT_REQUEST_LIFETIME` (see
+[Lifetimes](#lifetimes)), including the new login. If it has expired, the page says so and asks to
+start the connection again in the application.
+
+Limit: with a login through an identity provider such as Keycloak, the link ends only the Dolibarr
+session. If the provider's session in this browser still belongs to the previous person, the provider
+logs them in again without a password and the consent page names them again. Then that person has to
+log out of the provider first (for example by logging out of the MCP client's chat, which with
+[front-channel logout](#front-channel-logout-keycloak) also ends the Dolibarr session).
 
 ## Front-channel logout (Keycloak)
 
