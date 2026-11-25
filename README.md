@@ -171,8 +171,12 @@ Logout does (trigger `USER_LOGOUT`, hooks `afterLogout`, the PHP session is dest
 browser back to the same consent page for the same request. Dolibarr then shows its login page, and
 after the login the consent page shows the new account. The link carries the page's CSRF token; it is
 not shown for the authentication modes `http` and `forceuser`, whose sessions Dolibarr's Logout does
-not end either. It also deletes the cookie `DOL_rollback_url_*`, so that Dolibarr's `openid_connect`
-login returns to the consent page and not to an older page.
+not end either. It also sets (without the IdP hop: deletes) the cookie `DOL_rollback_url_*`, so that Dolibarr's
+`openid_connect` login returns to the consent page and not to an older page. With the identity provider hop the
+cookie is set to the consent page before the browser leaves: Keycloak's front-channel logout iframe can load
+Dolibarr's `user/logout.php` while there is no session (the session cookie is `SameSite=Lax`, so only when
+Dolibarr and Keycloak are on the same site, e.g. `erp.example.com` and `sso.example.com`), and Dolibarr's login page
+would store that URL as the place to return to.
 
 The request behind the page (`req`) is valid for `RESTOAUTH_CONSENT_REQUEST_LIFETIME` (see
 [Lifetimes](#lifetimes)), including the new login. If it has expired, the page says so and asks to

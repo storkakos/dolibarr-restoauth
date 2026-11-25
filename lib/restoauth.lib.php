@@ -341,6 +341,26 @@ function restoauth_idp_end_session_url($returnUrl)
 }
 
 /**
+ * Sets the cookie DOL_rollback_url_<prefix> to a Dolibarr-relative URL, the page Dolibarr's openid_connect login
+ * returns to. Used before the identity provider's logout: Keycloak's front-channel logout iframe may load
+ * Dolibarr's user/logout.php with the browser's cookies (same-site deployments) while there is no session, that
+ * page shows the login page, and the login page stores its own URL here if the cookie is empty. A value set here
+ * stays. Only an internal relative URL is accepted (Dolibarr's callback accepts nothing else).
+ *
+ * @param string $relativeUrl Path and query, starting with '/' (for example /custom/restoauth/consent.php?req=...)
+ * @return bool true if the cookie was set
+ */
+function restoauth_set_login_return($relativeUrl)
+{
+	if (!preg_match('/^\/[a-z0-9]/i', (string) $relativeUrl) || strpbrk($relativeUrl, "\r\n") !== false) {
+		return false;
+	}
+	$https = function_exists('isHTTPS') ? isHTTPS() : (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+	header('Set-Cookie: DOL_rollback_url_'.dol_getprefix('').'='.rawurlencode($relativeUrl).'; Max-Age=3600; Path=/; HttpOnly; SameSite=Lax'.($https ? '; Secure' : ''), false);
+	return true;
+}
+
+/**
  * Deletes the cookies DOL_rollback_url_* of Dolibarr's login page. The login page stores the URL that showed it
  * there (only if the cookie is not set yet), and Dolibarr's openid_connect login returns to that URL. Deleting
  * it makes the next login page store the current URL, so the login returns there.

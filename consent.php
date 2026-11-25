@@ -70,7 +70,12 @@ if ($action === 'switch' && GETPOST('token', 'alpha') !== '' && GETPOST('token',
 		}
 	}
 	if (restoauth_end_session($db, 'consent page, other account'.($goTo !== $returnUrl ? ' and identity provider' : ''))) {
-		restoauth_forget_login_return();
+		// Before the IdP hop the cookie is set to this page, not just deleted: Keycloak's front-channel iframe
+		// can load user/logout.php (no session) and its login page would store that URL as the way back.
+		$rel = (string) parse_url($returnUrl, PHP_URL_PATH).'?req='.$packed;
+		if ($goTo === $returnUrl || !restoauth_set_login_return($rel)) {
+			restoauth_forget_login_return();
+		}
 		// A session that could not be ended (see restoauth_session_can_end) never reaches the provider's logout.
 	} else {
 		$goTo = $returnUrl;
