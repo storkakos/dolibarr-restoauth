@@ -4,6 +4,14 @@ All notable changes to restoauth are listed here. Versions follow [Semantic Vers
 each release is a git tag `vX.Y.Z` with the ZIP `module_restoauth-X.Y.Z.zip` for Dolibarr's module
 upload.
 
+## Unreleased
+
+- New endpoint `frontchannel-logout.php` for Keycloak's front-channel logout (README: "Front-channel
+  logout (Keycloak)"). It ends the browser's Dolibarr session like Dolibarr's own Logout, without a
+  redirect, never shows the login page and sets no cookie. Used instead of Dolibarr's
+  `user/logout.php`, it avoids that the next Keycloak login after Dolibarr's own Logout ends on the
+  logout page (cookie `DOL_rollback_url_*`). No new constants; no reactivation needed.
+
 ## 0.2.2 - 2026-11-24
 
 - Disabling a Dolibarr user now ends all of that user's connections at once: their refresh tokens
