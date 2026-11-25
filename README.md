@@ -183,8 +183,8 @@ Next to the user, the link **Not <name>? Log out and use another account** is fo
 the same browser who finds someone else's session. It ends the Dolibarr session the way Dolibarr's own
 Logout does (trigger `USER_LOGOUT`, hooks `afterLogout`, the PHP session is destroyed) and sends the
 browser back to the same consent page for the same request. Dolibarr then shows its login page, and
-after the login the consent page shows the new account. The link carries the page's CSRF token; it is
-not shown for the authentication modes `http` and `forceuser`, whose sessions Dolibarr's Logout does
+after the login the consent page shows the new account. The link carries a token of its own (parameter `restoauth_switch`, bound to the PHP session and
+the user, so it stays valid while the session opens other Dolibarr pages); it is not shown for the authentication modes `http` and `forceuser`, whose sessions Dolibarr's Logout does
 not end either. It also sets (without the IdP hop: deletes) the cookie `DOL_rollback_url_*`, so that Dolibarr's
 `openid_connect` login returns to the consent page and not to an older page. With the identity provider hop the
 cookie is set to the consent page before the browser leaves: Keycloak's front-channel logout iframe can load

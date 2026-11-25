@@ -6,6 +6,11 @@ upload.
 
 ## Unreleased
 
+- Fix: `max_age` is measured from the authorization request (`iat`), not from when the consent page loads, so
+  waiting on the consent page no longer forces an extra login. The "Not <name>?" link carries its own token in
+  the parameter `restoauth_switch` (bound to the session and user); Dolibarr's CSRF check drops a GET `token`
+  that is not the current page token, so before, the link only reloaded the page once the session had opened
+  another Dolibarr page. No reactivation needed.
 - Fix: the front-channel logout endpoint (`frontchannel-logout.php`) ends a Dolibarr session only if it was
   opened through the identity provider (authentication mode `openid_connect`). Before, it also ended a session
   opened with Dolibarr's own login form (password), contrary to the README: an administrator logged in with a
