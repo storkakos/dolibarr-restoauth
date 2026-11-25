@@ -2,8 +2,10 @@
 /* restoauth - Front-channel logout URL for the Keycloak (OpenID Connect) client of Dolibarr.
  *
  * On a Keycloak logout, Keycloak's logout page loads this URL in an iframe. If the browser has a Dolibarr
- * session, it is ended the way user/logout.php ends it (trigger USER_LOGOUT, hooks afterLogout in the context
- * logout, session_destroy()), without a redirect. Without a session nothing happens.
+ * session that was opened through the identity provider (authentication mode openid_connect), it is ended the
+ * way user/logout.php ends it (trigger USER_LOGOUT, hooks afterLogout in the context logout, session_destroy()),
+ * without a redirect. Without a session, and for a session opened another way (Dolibarr's own login form), nothing
+ * happens: such a session does not belong to the Keycloak session that ends.
  *
  * Unlike user/logout.php, this page never shows Dolibarr's login page (NOLOGIN). The login page sets the cookie
  * DOL_rollback_url_* to the page that showed it, so a front-channel call to user/logout.php without a session
@@ -40,7 +42,13 @@ function restoauth_frontchannel_done()
 }
 
 if (isModEnabled('restoauth')) {
-	// Sessions of the authentication modes http and forceuser are left alone (see restoauth_session_can_end).
-	restoauth_end_session($db, 'front-channel logout');
+	// Only a session opened through the identity provider ends here. A session from Dolibarr's own login form
+	// (mode dolibarr), http or forceuser survives: it is not the Keycloak session's.
+	if (restoauth_session_is_openid_connect()) {
+		restoauth_end_session($db, 'front-channel logout');
+	} elseif (restoauth_session_can_end()) {
+		dol_syslog('restoauth: front-channel logout leaves the session of '.$_SESSION['dol_login'].' alone, authentication mode '
+			.(empty($_SESSION['dol_authmode']) ? '(none)' : $_SESSION['dol_authmode']).' is not openid_connect', LOG_INFO);
+	}
 }
 restoauth_frontchannel_done();

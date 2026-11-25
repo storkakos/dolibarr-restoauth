@@ -183,21 +183,22 @@ function restoauth_lifetime($name)
 }
 
 /**
- * Autorisierungsanfrage signiert und hex-kodiert verpacken (kein state/code in der URL der Zustimmungsseite,
- * sonst kollidiert der Parameter state mit dem Keycloak-Login von Dolibarr 23).
+ * Pack the authorization request signed and hex-encoded (no state/code in the URL of the consent page,
+ * otherwise the state parameter collides with the Keycloak login of Dolibarr 23).
  *
- * @param array<string,mixed> $req Anfrage
+ * @param array<string,mixed> $req Request
+ * @param int                 $exp Expiry to keep (re-packing a request); 0 = now plus the request lifetime
  * @return string
  */
-function restoauth_pack_request($req)
+function restoauth_pack_request($req, $exp = 0)
 {
-	$req['exp'] = dol_now() + restoauth_lifetime('RESTOAUTH_CONSENT_REQUEST_LIFETIME');
+	$req['exp'] = $exp > 0 ? (int) $exp : dol_now() + restoauth_lifetime('RESTOAUTH_CONSENT_REQUEST_LIFETIME');
 	$payload = json_encode($req, JSON_UNESCAPED_SLASHES);
 	return bin2hex($payload).'.'.hash_hmac('sha256', $payload, restoauth_signing_key());
 }
 
 /**
- * @param string    $packed  Wert aus restoauth_pack_request
+ * @param string    $packed  Value from restoauth_pack_request
  * @param bool|null $expired Out: true if the request is genuine (signature valid) but expired
  * @return array<string,mixed>|null
  */
@@ -244,7 +245,8 @@ function restoauth_session_can_end()
  * output, no cookie: the caller decides what the browser gets. Works with and without NOLOGIN (with NOLOGIN,
  * main.inc.php has not loaded the session's user; it is loaded here for the trigger and the hooks).
  *
- * Used by frontchannel-logout.php and by the "Not <name>?" link of consent.php.
+ * Used by frontchannel-logout.php and, through restoauth_restart_consent(), by consent.php: the "Not <name>?"
+ * link and the forced login of prompt=login / max_age.
  *
  * @param DoliDB $db  Database
  * @param string $why Caller, for the log (e.g. "front-channel logout")
@@ -283,6 +285,161 @@ function restoauth_end_session($db, $why)
 	dol_syslog('restoauth: '.$why.' of '.$login.', end of session '.session_id(), LOG_NOTICE);
 	unset($_SESSION['dol_login'], $_SESSION['dol_entity'], $_SESSION['urlfrom']);
 	session_destroy();
+	return true;
+}
+
+/**
+ * When did this browser's Dolibarr session begin? The trigger USER_LOGIN stores the time in
+ * $_SESSION['restoauth_login_at'] at every login (password form and openid_connect alike), so it is this
+ * session's own login, not the user's last login on any device. A session that began before the trigger existed
+ * has no such value; the user's datelastlogin is the fallback for it.
+ *
+ * @return int Unix time, 0 if unknown
+ */
+function restoauth_session_login_time()
+{
+	global $user;
+
+	if (session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['restoauth_login_at'])) {
+		return (int) $_SESSION['restoauth_login_at'];
+	}
+	return is_object($user) && !empty($user->datelastlogin) ? (int) $user->datelastlogin : 0;
+}
+
+/**
+ * Did this browser's session begin before the authorization request (so it is not the login the request led to)?
+ * With the microsecond times (the request's iat_us, the session's restoauth_login_at_us) the comparison is exact
+ * also within one clock second: a session that was there first is older, a login made after the request (no
+ * session when it was sent, password form in the same second) is not. Without them (a session from before the
+ * trigger, a request without iat_us) the whole seconds are compared and the same second counts as older, so a
+ * request is never wrongly answered by an old session; the marker "forced" ends any resulting extra login.
+ *
+ * @param array<string,mixed> $req Unpacked request
+ * @return bool
+ */
+function restoauth_session_older_than_request($req)
+{
+	$iat = isset($req['iat']) ? (int) $req['iat'] : 0;
+	if (session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['restoauth_login_at_us']) && !empty($req['iat_us'])) {
+		return (float) $_SESSION['restoauth_login_at_us'] < (float) $req['iat_us'];
+	}
+	return restoauth_session_login_time() <= $iat;
+}
+
+/**
+ * Ends the session for a consent request and sends the browser back to that request, as a marked one: with
+ * prompt=login / max_age the request gets the marker "forced" (signed, expiry unchanged). A request with the
+ * marker never forces a login again, so the next login (made for this request) is accepted whatever its time and
+ * a login path that does not update the login time cannot cause a loop. Used for the forced login of
+ * prompt=login / max_age and for the "Not <name>?" link, which can also go through the identity provider's
+ * RP-initiated logout ($viaIdp, only for a session from openid_connect). Sets the cookie of the login return
+ * to the request (or deletes it) and redirects; does not return then.
+ *
+ * @param DoliDB              $db     Database
+ * @param array<string,mixed> $req    Unpacked request (restoauth_unpack_request)
+ * @param string              $why    Caller, for the log
+ * @param bool                $viaIdp Also end the identity provider's session if there is a way
+ * @return bool False if the session cannot be ended (see restoauth_session_can_end); nothing was sent then
+ */
+function restoauth_restart_consent($db, $req, $why, $viaIdp = false)
+{
+	if (!empty($req['login']) || isset($req['max_age'])) {
+		$req['forced'] = 1;
+	}
+	$packed = restoauth_pack_request($req, (int) $req['exp']);
+	$returnUrl = restoauth_issuer().'/consent.php?req='.$packed;
+	$goTo = $returnUrl;
+	if ($viaIdp && restoauth_session_is_openid_connect()) {
+		$idpUrl = restoauth_idp_end_session_url($returnUrl);
+		if ($idpUrl !== '') {
+			$goTo = $idpUrl;
+		}
+	}
+	if (!restoauth_end_session($db, $why.($goTo !== $returnUrl ? ' and identity provider' : ''))) {
+		return false;
+	}
+	// Before the IdP hop the cookie is set to this page, not just deleted: Keycloak's front-channel iframe
+	// can load user/logout.php (no session) and its login page would store that URL as the way back.
+	$rel = (string) parse_url($returnUrl, PHP_URL_PATH).'?req='.$packed;
+	if ($goTo === $returnUrl || !restoauth_set_login_return($rel)) {
+		restoauth_forget_login_return();
+	}
+	header('Cache-Control: no-store');
+	header('Location: '.$goTo, true, 302);
+	exit;
+}
+
+/**
+ * Is this browser session one that Dolibarr created through the identity provider (authentication mode
+ * openid_connect)? Call before restoauth_end_session(), which destroys the session.
+ *
+ * @return bool
+ */
+function restoauth_session_is_openid_connect()
+{
+	return session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['dol_authmode'])
+		&& in_array('openid_connect', array_map('trim', explode(',', (string) $_SESSION['dol_authmode'])), true);
+}
+
+/**
+ * The identity provider's end_session endpoint (OIDC RP-initiated logout) without query: the constant
+ * RESTOAUTH_OIDC_END_SESSION_URL, else scheme, host, port and path of Dolibarr's
+ * MAIN_AUTHENTICATION_OIDC_LOGOUT_URL (Dolibarr appends its own parameters to that one, so its query is dropped).
+ *
+ * @return string URL, or '' if none is configured or it is not http(s)
+ */
+function restoauth_idp_end_session_endpoint()
+{
+	foreach (array('RESTOAUTH_OIDC_END_SESSION_URL', 'MAIN_AUTHENTICATION_OIDC_LOGOUT_URL') as $name) {
+		$raw = trim(getDolGlobalString($name));
+		if ($raw === '') {
+			continue;
+		}
+		$p = parse_url($raw);
+		if (!is_array($p) || empty($p['host']) || empty($p['scheme']) || !in_array(strtolower($p['scheme']), array('http', 'https'), true)) {
+			continue;
+		}
+		return strtolower($p['scheme']).'://'.$p['host'].(isset($p['port']) ? ':'.(int) $p['port'] : '').(isset($p['path']) ? $p['path'] : '');
+	}
+	return '';
+}
+
+/**
+ * URL that ends the identity provider's session through RP-initiated logout and then returns the browser to
+ * $returnUrl: <end_session_endpoint>?client_id=<Dolibarr's client>&post_logout_redirect_uri=<$returnUrl>. The
+ * return target is a parameter of its own, never "state". Without id_token_hint the provider may ask the person
+ * to confirm the logout once. $returnUrl must be allowed under "Valid post logout redirect URIs" of the client.
+ *
+ * @param string $returnUrl Where the provider sends the browser afterwards
+ * @return string URL, or '' if the endpoint or the client id (MAIN_AUTHENTICATION_OIDC_CLIENT_ID) is not known
+ */
+function restoauth_idp_end_session_url($returnUrl)
+{
+	$endpoint = restoauth_idp_end_session_endpoint();
+	$clientId = trim(getDolGlobalString('MAIN_AUTHENTICATION_OIDC_CLIENT_ID'));
+	if ($endpoint === '' || $clientId === '') {
+		return '';
+	}
+	return $endpoint.'?'.http_build_query(array('client_id' => $clientId, 'post_logout_redirect_uri' => $returnUrl), '', '&', PHP_QUERY_RFC3986);
+}
+
+/**
+ * Sets the cookie DOL_rollback_url_<prefix> to a Dolibarr-relative URL, the page Dolibarr's openid_connect login
+ * returns to. Used before the identity provider's logout: Keycloak's front-channel logout iframe may load
+ * Dolibarr's user/logout.php with the browser's cookies (same-site deployments) while there is no session, that
+ * page shows the login page, and the login page stores its own URL here if the cookie is empty. A value set here
+ * stays. Only an internal relative URL is accepted (Dolibarr's callback accepts nothing else).
+ *
+ * @param string $relativeUrl Path and query, starting with '/' (for example /custom/restoauth/consent.php?req=...)
+ * @return bool true if the cookie was set
+ */
+function restoauth_set_login_return($relativeUrl)
+{
+	if (!preg_match('/^\/[a-z0-9]/i', (string) $relativeUrl) || strpbrk($relativeUrl, "\r\n") !== false) {
+		return false;
+	}
+	$https = function_exists('isHTTPS') ? isHTTPS() : (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+	header('Set-Cookie: DOL_rollback_url_'.dol_getprefix('').'='.rawurlencode($relativeUrl).'; Max-Age=3600; Path=/; HttpOnly; SameSite=Lax'.($https ? '; Secure' : ''), false);
 	return true;
 }
 
@@ -700,4 +857,16 @@ function restoauth_rights_labels($db, $langs, $u)
 		$out[$o->module][] = $label;
 	}
 	return $out;
+}
+
+/**
+ * Token for the "Not you?" link of the consent page. It is bound to the PHP session and the user, and stays the same
+ * while the session loads other Dolibarr pages (Dolibarr's own page token changes with every page load).
+ *
+ * @return string
+ */
+function restoauth_switch_token()
+{
+	global $user;
+	return hash_hmac('sha256', 'switch|'.session_id().'|'.((int) $user->id), restoauth_signing_key());
 }

@@ -6,10 +6,37 @@ upload.
 
 ## Unreleased
 
+- Fix: `prompt=login` and `max_age` no longer miss a request sent in the same second as the last login, and
+  they use this browser session's login time (stored by a new `USER_LOGIN` trigger in the PHP session), not the
+  user's last login on any device. The login made for the request is never asked for again (marker in the signed
+  request), so there is no loop. Known limit: until the request expires, the marked URL opened again in the same
+  browser is answered without another login (see README, `prompt=login` and `max_age`). "Logged in since" on the consent page shows the same session time. No
+  reactivation needed; sessions that began before the update use the user's last login date until they end.
+- Fix: `max_age` is measured from the authorization request (`iat`), not from when the consent page loads, so
+  waiting on the consent page no longer forces an extra login. The "Not <name>?" link carries its own token in
+  the parameter `restoauth_switch` (bound to the session and user); Dolibarr's CSRF check drops a GET `token`
+  that is not the current page token, so before, the link only reloaded the page once the session had opened
+  another Dolibarr page. No reactivation needed.
+- Fix: the front-channel logout endpoint (`frontchannel-logout.php`) ends a Dolibarr session only if it was
+  opened through the identity provider (authentication mode `openid_connect`). Before, it also ended a session
+  opened with Dolibarr's own login form (password), contrary to the README: an administrator logged in with a
+  password lost the session when someone else logged out of Keycloak in the same browser. No new constants; no
+  reactivation needed.
+- The consent page's "Not <name>?" link also ends the identity provider's session when the Dolibarr session came
+  from `openid_connect`: it sends the browser through the provider's RP-initiated logout
+  (`client_id`, `post_logout_redirect_uri` = the same consent request) and back. The endpoint is the new optional
+  constant `RESTOAUTH_OIDC_END_SESSION_URL` or taken from `MAIN_AUTHENTICATION_OIDC_LOGOUT_URL`; without one the
+  page shows a hint to log out of the provider first. Keycloak needs `<issuer>/consent.php*` under "Valid post
+  logout redirect URIs". Before the hop the cookie `DOL_rollback_url_*` is set to the consent page, so Keycloak's
+  front-channel iframe (loading `user/logout.php` without a session, same-site setups) cannot make the next
+  login return to the logout page. No reactivation needed.
 - `authorize.php` honours `prompt=login` and `max_age`: if the browser's Dolibarr session began before the
   request (and, for `max_age`, is older than that), the consent page ends it and the user logs in again.
   Without the parameters nothing changes. A login through Keycloak can still be a silent single sign-on.
   No new constants; no reactivation needed.
+- README: the nginx discovery rules are also tested with nginx serving Dolibarr through PHP-FPM, and
+  the nginx section says what the rest of the server block needs for restoauth (`PATH_INFO`,
+  files that exist, `/conf/` denied). Documentation only.
 - New endpoint `frontchannel-logout.php` for Keycloak's front-channel logout (README: "Front-channel
   logout (Keycloak)"). It ends the browser's Dolibarr session like Dolibarr's own Logout, without a
   redirect, never shows the login page and sets no cookie. Used instead of Dolibarr's
