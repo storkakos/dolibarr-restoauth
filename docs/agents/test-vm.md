@@ -33,7 +33,7 @@ cat "$QUEUE/README.md"
 - **`batch`** (default): the runner may merge your branch with other queued branches of the same repo into a temporary integration branch (from `target`) and test them all in one run. **`single`**: a run that cannot be shared; you give the exact `## Steps`.
 - **Result** `<agent>.result.md`, written only by `vm-runner`: `commit`, `status` (`PASS`, `FAIL`, `CONFLICT`, `ERROR`), `run` (the RUN name and what it included), `summary` and an excerpt. What to do with each status is in [issue-tracker.md](issue-tracker.md#testing-through-the-vm-queue).
 - **Finding the culprit**: when a batch run fails, the runner reruns the failing check per branch. The branch that fails alone gets `FAIL` with its lines; the others get `PASS`. A branch that does not merge cleanly gets `CONFLICT` and is run alone or sent back for a rebase.
-- A restoauth change that needs a test-stack run is requested in `dolibarr-mcp-server`'s queue format with `repo: dolibarr-mcp-server` and the restoauth branch or commit named in `proves` plus a `## Steps` note to use restoauth from the local checkout (see dolibarr-mcp-server's `test-stack/README.md`).
+- A restoauth change that needs a test-stack run is tested in dolibarr-mcp-server's stack: write the request with `repo: dolibarr-mcp-server`, `kind: single`, `needs: stack`, name your restoauth branch and commit in `proves`, and add `## Steps` that build the stack with `RESTOAUTH_LOCAL` pointing at a checkout of that commit (dolibarr-mcp-server's `test-stack/README.md`, "restoauth from a local ZIP or checkout").
 
 ### What the runner takes care of
 
@@ -41,7 +41,7 @@ These are `vm-runner`'s job, not the ticket agent's:
 
 - the VM rules in [Sharing the VM](#sharing-the-vm): at most 3 stacks at once, a VM slot per stack, enough free RAM;
 - unique RUN names across repos (prefixed `it-`, `dl-`, `ra-`);
-- the shared LLM key (see [LLM key](#llm-key)): pointing runs at it, never printing it;
+- the shared LLM key on the VM (`/root/shared/llm.env`) for stack runs in dolibarr-mcp-server: pointing runs at it, never printing it;
 - the [clean-up](#clean-up) after every run: stacks, volumes, networks, images, folders and slots of its RUNs, plus its integration branches and worktrees (local only, never pushed).
 
 The rest of this file is the reference for the runner, and for the maintainer working alone without the queue.
