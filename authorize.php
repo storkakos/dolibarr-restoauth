@@ -64,14 +64,37 @@ if (strlen($state) > 1000 || strlen($in('scope')) > 255) {
 	$back('invalid_request', 'Parameter too long');
 }
 
-$packed = restoauth_pack_request(array(
+// OIDC Core 3.1.2.1: prompt is a space-separated list; "login" asks for a new login. max_age is the longest
+// accepted age of the login in seconds; max_age=0 means the same as prompt=login. consent.php enforces both,
+// because only that page has the Dolibarr session (this endpoint runs with NOSESSION).
+$promptValues = preg_split('/\s+/', trim($in('prompt')), -1, PREG_SPLIT_NO_EMPTY);
+$forceLogin = in_array('login', $promptValues, true);
+$maxAge = $in('max_age');
+if ($maxAge !== '' && !preg_match('/^[0-9]{1,9}$/', $maxAge)) {
+	$back('invalid_request', 'max_age must be a number of seconds');
+}
+if ($maxAge === '0') {
+	$forceLogin = true;
+}
+
+$packedReq = array(
 	'client_id' => $client->client_id,
 	'redirect_uri' => $redirectUri,
 	'state' => $state,
 	'code_challenge' => $challenge,
 	'resource' => $resource,
 	'scope' => $in('scope'),
-));
+);
+if ($forceLogin || $maxAge !== '') {
+	// Time of this request: a login at or after it counts as the fresh login the client asked for.
+	$packedReq['iat'] = dol_now();
+	if ($forceLogin) {
+		$packedReq['login'] = 1;
+	} else {
+		$packedReq['max_age'] = (int) $maxAge;
+	}
+}
+$packed = restoauth_pack_request($packedReq);
 header('Cache-Control: no-store');
 header('Location: '.restoauth_issuer().'/consent.php?req='.$packed, true, 302);
 exit;
