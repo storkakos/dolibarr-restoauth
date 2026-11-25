@@ -247,6 +247,8 @@ lint's exit code and cleans up. Run it from Git Bash; see
 bash scripts/test-on-vm.sh
 ```
 
+When several agents work at once, only the `vm-runner` session runs this; ticket agents queue a request instead (see [Only `vm-runner` uses the VM](docs/agents/test-vm.md#only-vm-runner-uses-the-vm)).
+
 Build the release ZIP from a tag. The script checks that the tag `vX.Y.Z` matches
 `$this->version` in `core/modules/modRestOAuth.class.php` and writes
 `dist/module_restoauth-X.Y.Z.zip` with `git archive`, so only committed files of that tag go in and

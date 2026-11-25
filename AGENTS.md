@@ -5,9 +5,7 @@ the way Dolibarr expects them inside `htdocs/custom/restoauth`. Only Dolibarr 23
 Docs, code comments and commit messages are in English; the module keeps its `de_DE` and `en_US`
 language files.
 
-Tests never run locally on this machine. Before you finish a change to PHP files, run
-`bash scripts/test-on-vm.sh`: it runs `scripts/lint-php.sh` on the test VM and cleans up after
-itself.
+Tests never run locally on this machine. Only the pane `vm-runner` talks to the VM. A ticket agent never runs `ssh` or `scripts/test-on-vm.sh` itself: it commits, queues a request in the workspace's `.vm-queue/` (`../.vm-queue/README.md` from the main checkout's root is the protocol) and waits for the result. See `docs/agents/test-vm.md` (Only `vm-runner` uses the VM) and `docs/agents/issue-tracker.md` (Testing through the VM queue). The script itself (`scripts/test-on-vm.sh` for the PHP lint) is described in test-vm.md for the runner.
 
 ## Agent skills
 
