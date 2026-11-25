@@ -183,10 +183,10 @@ function restoauth_lifetime($name)
 }
 
 /**
- * Autorisierungsanfrage signiert und hex-kodiert verpacken (kein state/code in der URL der Zustimmungsseite,
- * sonst kollidiert der Parameter state mit dem Keycloak-Login von Dolibarr 23).
+ * Pack the authorization request signed and hex-encoded (no state/code in the URL of the consent page,
+ * otherwise the state parameter collides with the Keycloak login of Dolibarr 23).
  *
- * @param array<string,mixed> $req Anfrage
+ * @param array<string,mixed> $req Request
  * @return string
  */
 function restoauth_pack_request($req)
@@ -197,7 +197,7 @@ function restoauth_pack_request($req)
 }
 
 /**
- * @param string    $packed  Wert aus restoauth_pack_request
+ * @param string    $packed  Value from restoauth_pack_request
  * @param bool|null $expired Out: true if the request is genuine (signature valid) but expired
  * @return array<string,mixed>|null
  */
@@ -774,4 +774,16 @@ function restoauth_rights_labels($db, $langs, $u)
 		$out[$o->module][] = $label;
 	}
 	return $out;
+}
+
+/**
+ * Token for the "Not you?" link of the consent page. It is bound to the PHP session and the user, and stays the same
+ * while the session loads other Dolibarr pages (Dolibarr's own page token changes with every page load).
+ *
+ * @return string
+ */
+function restoauth_switch_token()
+{
+	global $user;
+	return hash_hmac('sha256', 'switch|'.session_id().'|'.((int) $user->id), restoauth_signing_key());
 }
