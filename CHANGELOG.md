@@ -6,6 +6,11 @@ upload.
 
 ## Unreleased
 
+- Fix: the front-channel logout endpoint (`frontchannel-logout.php`) ends a Dolibarr session only if it was
+  opened through the identity provider (authentication mode `openid_connect`). Before, it also ended a session
+  opened with Dolibarr's own login form (password), contrary to the README: an administrator logged in with a
+  password lost the session when someone else logged out of Keycloak in the same browser. No new constants; no
+  reactivation needed.
 - The consent page's "Not <name>?" link also ends the identity provider's session when the Dolibarr session came
   from `openid_connect`: it sends the browser through the provider's RP-initiated logout
   (`client_id`, `post_logout_redirect_uri` = the same consent request) and back. The endpoint is the new optional

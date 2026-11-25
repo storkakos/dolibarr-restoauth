@@ -251,9 +251,12 @@ client → Settings → Logout settings):
 
 What the endpoint does:
 
-- With a Dolibarr session in the browser, it ends that session the way Dolibarr's own Logout does
-  (trigger `USER_LOGOUT`, hooks `afterLogout`, the PHP session is destroyed), without a redirect. The
-  next Dolibarr page shows the login page.
+- With a Dolibarr session in the browser that was **opened through Keycloak** (authentication mode
+  `openid_connect`), it ends that session the way Dolibarr's own Logout does (trigger `USER_LOGOUT`,
+  hooks `afterLogout`, the PHP session is destroyed), without a redirect. The next Dolibarr page shows
+  the login page.
+- A session opened with Dolibarr's own login form (a password), or in the modes `http` and `forceuser`,
+  is left alone: it does not belong to the Keycloak session.
 - Without a session (after Dolibarr's own Logout, or a timed-out session), it does nothing.
 - Either way it answers `200` with an empty body and `Cache-Control: no-store`, and sets **no
   cookie**. It needs no CSRF token and ignores Keycloak's `iss` and `sid` parameters.
@@ -270,7 +273,8 @@ Limits (they come from front-channel logout, not from restoauth):
   the same site (registrable domain), e.g. `erp.example.com` and `sso.example.com`. Across sites,
   browsers send no cookie and the session stays.
 - Only a Dolibarr session opened through Keycloak belongs to the Keycloak session. A session opened
-  with Dolibarr's own login form is not ended by a Keycloak logout.
+  with Dolibarr's own login form is not ended by a Keycloak logout, not even when the same browser had
+  a Keycloak session before (the endpoint checks the authentication mode of the Dolibarr session).
 - It only runs when the logout goes through Keycloak (the client must call Keycloak's end-session
   endpoint) and the browser loads Keycloak's logout page.
 - Like Dolibarr's `user/logout.php`, any page can end a user's Dolibarr session by sending the browser
