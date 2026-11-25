@@ -56,12 +56,13 @@ $action = GETPOST('restoauth_action', 'aZ09');
 // "Not <name>? Log out and use another account": end the Dolibarr session and come back to the same request,
 // so that the next person logs in as themselves. The link carries a token bound to the session (not Dolibarr's page
 // token, which changes whenever the session loads another page), so another site cannot log the user out through
-// it (Dolibarr's own Logout does not check one).
+// it (Dolibarr's own Logout does not check one). The parameter is not called "token": Dolibarr's CSRF check
+// (main.inc.php) drops a GET "token" that differs from its own page token before this file runs.
 // With a login through the identity provider (openid_connect) the provider's session is ended too, by its
 // RP-initiated logout; the provider sends the browser back to this same request. Otherwise its SSO session
 // would log the previous person in again without a password. The return target is a parameter of its own,
 // not "state". Without a known end_session endpoint the behaviour is the plain one and the page shows a hint.
-if ($action === 'switch' && GETPOST('token', 'alpha') !== '' && hash_equals(restoauth_switch_token(), GETPOST('token', 'alpha'))) {
+if ($action === 'switch' && GETPOST('restoauth_switch', 'alpha') !== '' && hash_equals(restoauth_switch_token(), GETPOST('restoauth_switch', 'alpha'))) {
 	$returnUrl = restoauth_issuer().'/consent.php?req='.$packed;
 	$goTo = $returnUrl;
 	if (restoauth_session_is_openid_connect()) {
@@ -124,7 +125,7 @@ if ($req['resource'] !== '') {
 $fullName = trim($user->getFullName($langs));
 print '<tr><td>'.$langs->trans('User').'</td><td>'.dol_escape_htmltag(($fullName !== '' ? $fullName : $user->login).' ('.$user->login.')');
 if (restoauth_session_can_end()) {
-	$switchUrl = restoauth_issuer().'/consent.php?req='.$packed.'&restoauth_action=switch&token='.restoauth_switch_token();
+	$switchUrl = restoauth_issuer().'/consent.php?req='.$packed.'&restoauth_action=switch&restoauth_switch='.restoauth_switch_token();
 	print ' &nbsp; <a class="restoauth-switch" href="'.dol_escape_htmltag($switchUrl).'">'.dol_escape_htmltag($langs->transnoentities('RestOAuthNotYou', $fullName !== '' ? $fullName : $user->login)).'</a>';
 	if (restoauth_session_is_openid_connect() && restoauth_idp_end_session_url('') === '') {
 		print '<br><span class="opacitymedium">'.dol_escape_htmltag($langs->transnoentities('RestOAuthNotYouIdpHint')).'</span>';
