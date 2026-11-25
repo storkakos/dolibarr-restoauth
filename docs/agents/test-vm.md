@@ -39,7 +39,7 @@ cat "$QUEUE/README.md"
 
 These are `vm-runner`'s job, not the ticket agent's:
 
-- the VM rules in [Sharing the VM](#sharing-the-vm): at most 3 stacks at once, a VM slot per stack, enough free RAM;
+- the VM rules in [Sharing the VM](#sharing-the-vm): at most 6 stacks at once, a VM slot per stack, at least 3 GB RAM available;
 - unique RUN names across repos (prefixed `it-`, `dl-`, `ra-`);
 - the shared LLM key on the VM (`/root/shared/llm.env`) for stack runs in dolibarr-mcp-server: pointing runs at it, never printing it;
 - the [clean-up](#clean-up) after every run: stacks, volumes, networks, images, folders and slots of its RUNs, plus its integration branches and worktrees (local only, never pushed).
