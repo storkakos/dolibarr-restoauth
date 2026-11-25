@@ -187,11 +187,12 @@ function restoauth_lifetime($name)
  * otherwise the state parameter collides with the Keycloak login of Dolibarr 23).
  *
  * @param array<string,mixed> $req Request
+ * @param int                 $exp Expiry to keep (re-packing a request); 0 = now plus the request lifetime
  * @return string
  */
-function restoauth_pack_request($req)
+function restoauth_pack_request($req, $exp = 0)
 {
-	$req['exp'] = dol_now() + restoauth_lifetime('RESTOAUTH_CONSENT_REQUEST_LIFETIME');
+	$req['exp'] = $exp > 0 ? (int) $exp : dol_now() + restoauth_lifetime('RESTOAUTH_CONSENT_REQUEST_LIFETIME');
 	$payload = json_encode($req, JSON_UNESCAPED_SLASHES);
 	return bin2hex($payload).'.'.hash_hmac('sha256', $payload, restoauth_signing_key());
 }
@@ -244,7 +245,8 @@ function restoauth_session_can_end()
  * output, no cookie: the caller decides what the browser gets. Works with and without NOLOGIN (with NOLOGIN,
  * main.inc.php has not loaded the session's user; it is loaded here for the trigger and the hooks).
  *
- * Used by frontchannel-logout.php and by the "Not <name>?" link of consent.php.
+ * Used by frontchannel-logout.php and, through restoauth_restart_consent(), by consent.php: the "Not <name>?"
+ * link and the forced login of prompt=login / max_age.
  *
  * @param DoliDB $db  Database
  * @param string $why Caller, for the log (e.g. "front-channel logout")
@@ -284,6 +286,67 @@ function restoauth_end_session($db, $why)
 	unset($_SESSION['dol_login'], $_SESSION['dol_entity'], $_SESSION['urlfrom']);
 	session_destroy();
 	return true;
+}
+
+/**
+ * When did this browser's Dolibarr session begin? The trigger USER_LOGIN stores the time in
+ * $_SESSION['restoauth_login_at'] at every login (password form and openid_connect alike), so it is this
+ * session's own login, not the user's last login on any device. A session that began before the trigger existed
+ * has no such value; the user's datelastlogin is the fallback for it.
+ *
+ * @return int Unix time, 0 if unknown
+ */
+function restoauth_session_login_time()
+{
+	global $user;
+
+	if (session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['restoauth_login_at'])) {
+		return (int) $_SESSION['restoauth_login_at'];
+	}
+	return is_object($user) && !empty($user->datelastlogin) ? (int) $user->datelastlogin : 0;
+}
+
+/**
+ * Ends the session for a consent request and sends the browser back to that request, as a marked one: with
+ * prompt=login / max_age the request gets the marker "forced" (signed, expiry unchanged). A request with the
+ * marker never forces a login again, so the next login (made for this request) is accepted whatever its time and
+ * a login path that does not update the login time cannot cause a loop. Used for the forced login of
+ * prompt=login / max_age and for the "Not <name>?" link, which can also go through the identity provider's
+ * RP-initiated logout ($viaIdp, only for a session from openid_connect). Sets the cookie of the login return
+ * to the request (or deletes it) and redirects; does not return then.
+ *
+ * @param DoliDB              $db     Database
+ * @param array<string,mixed> $req    Unpacked request (restoauth_unpack_request)
+ * @param string              $why    Caller, for the log
+ * @param bool                $viaIdp Also end the identity provider's session if there is a way
+ * @return bool False if the session cannot be ended (see restoauth_session_can_end); nothing was sent then
+ */
+function restoauth_restart_consent($db, $req, $why, $viaIdp = false)
+{
+	if (!empty($req['login']) || isset($req['max_age'])) {
+		$req['forced'] = 1;
+	}
+	$packed = restoauth_pack_request($req, (int) $req['exp']);
+	$returnUrl = restoauth_issuer().'/consent.php?req='.$packed;
+	$goTo = $returnUrl;
+	if ($viaIdp && restoauth_session_is_openid_connect()) {
+		$idpUrl = restoauth_idp_end_session_url($returnUrl);
+		if ($idpUrl !== '') {
+			$goTo = $idpUrl;
+		}
+	}
+	if (!restoauth_end_session($db, $why.($goTo !== $returnUrl ? ' and identity provider' : ''))) {
+		return false;
+	}
+	// Before the IdP hop the cookie is set to this page, not just deleted: Keycloak's front-channel iframe
+	// can load user/logout.php (no session) and its login page would store that URL as the way back.
+	$rel = (string) parse_url($returnUrl, PHP_URL_PATH).'?req='.$packed;
+	if ($goTo === $returnUrl || !restoauth_set_login_return($rel)) {
+		restoauth_forget_login_return();
+	}
+	header('Cache-Control: no-store');
+	header('Location: '.$goTo, true, 302);
+	exit;
 }
 
 /**

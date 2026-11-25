@@ -33,20 +33,19 @@ $sendBack = function ($params) use ($req) {
 	exit;
 };
 
-// prompt=login / max_age of the authorization request (see authorize.php): a session that is older than the request
-// (login time before "iat") and is not recent enough is ended, and the browser comes back to this same request.
-// The login time is the user's datelastlogin, which Dolibarr sets at every new login (password form and
-// openid_connect alike). After the new login it is >= iat, so the request passes and there is no loop. Sessions
-// that cannot be ended (auth mode http / forceuser) are left alone.
-if (!empty($req['login']) || isset($req['max_age'])) {
-	$loginAt = (int) $user->datelastlogin;
+// prompt=login / max_age of the authorization request (see authorize.php): a session that began before the request
+// (this browser session's login time, restoauth_session_login_time(), at or before "iat") and is not recent enough
+// is ended, and the browser comes back to this same request, marked "forced" (restoauth_restart_consent). The
+// comparison is "at or before" because a login in the same clock second as the request cannot be told apart by
+// time; it does not matter, since the login made for this request always comes back with the marker, and a marked
+// request is never forced again: no loop, also if a login path does not update the login time. Sessions that
+// cannot be ended (auth mode http / forceuser) are left alone.
+if ((!empty($req['login']) || isset($req['max_age'])) && empty($req['forced'])) {
+	$loginAt = restoauth_session_login_time();
 	$iat = isset($req['iat']) ? (int) $req['iat'] : 0;
 	$stale = !empty($req['login']) || ($iat - $loginAt) > (int) $req['max_age'];
-	if ($loginAt < $iat && $stale && restoauth_end_session($db, 'consent page, '.(!empty($req['login']) ? 'prompt=login' : 'max_age'))) {
-		restoauth_forget_login_return();
-		header('Cache-Control: no-store');
-		header('Location: '.restoauth_issuer().'/consent.php?req='.$packed, true, 302);
-		exit;
+	if ($loginAt <= $iat && $stale) {
+		restoauth_restart_consent($db, $req, 'consent page, '.(!empty($req['login']) ? 'prompt=login' : 'max_age'));
 	}
 }
 
@@ -63,27 +62,11 @@ $action = GETPOST('restoauth_action', 'aZ09');
 // would log the previous person in again without a password. The return target is a parameter of its own,
 // not "state". Without a known end_session endpoint the behaviour is the plain one and the page shows a hint.
 if ($action === 'switch' && GETPOST('restoauth_switch', 'alpha') !== '' && hash_equals(restoauth_switch_token(), GETPOST('restoauth_switch', 'alpha'))) {
-	$returnUrl = restoauth_issuer().'/consent.php?req='.$packed;
-	$goTo = $returnUrl;
-	if (restoauth_session_is_openid_connect()) {
-		$idpUrl = restoauth_idp_end_session_url($returnUrl);
-		if ($idpUrl !== '') {
-			$goTo = $idpUrl;
-		}
-	}
-	if (restoauth_end_session($db, 'consent page, other account'.($goTo !== $returnUrl ? ' and identity provider' : ''))) {
-		// Before the IdP hop the cookie is set to this page, not just deleted: Keycloak's front-channel iframe
-		// can load user/logout.php (no session) and its login page would store that URL as the way back.
-		$rel = (string) parse_url($returnUrl, PHP_URL_PATH).'?req='.$packed;
-		if ($goTo === $returnUrl || !restoauth_set_login_return($rel)) {
-			restoauth_forget_login_return();
-		}
-		// A session that could not be ended (see restoauth_session_can_end) never reaches the provider's logout.
-	} else {
-		$goTo = $returnUrl;
-	}
+	// Redirects and exits; a session that cannot be ended (see restoauth_session_can_end) never reaches the
+	// provider's logout, the page just opens again.
+	restoauth_restart_consent($db, $req, 'consent page, other account', true);
 	header('Cache-Control: no-store');
-	header('Location: '.$goTo, true, 302);
+	header('Location: '.restoauth_issuer().'/consent.php?req='.$packed, true, 302);
 	exit;
 }
 
@@ -132,8 +115,9 @@ if (restoauth_session_can_end()) {
 	}
 }
 $sessionInfo = array();
-if (!empty($user->datelastlogin)) {
-	$sessionInfo[] = $langs->transnoentities('RestOAuthLoggedInSince', dol_print_date($user->datelastlogin, 'dayhour', 'tzuser'));
+$sessionLoginAt = restoauth_session_login_time();
+if ($sessionLoginAt > 0) {
+	$sessionInfo[] = $langs->transnoentities('RestOAuthLoggedInSince', dol_print_date($sessionLoginAt, 'dayhour', 'tzuser'));
 }
 if (!empty($_SESSION['dol_authmode'])) {
 	$sessionInfo[] = $langs->transnoentities('RestOAuthAuthMode', (string) $_SESSION['dol_authmode']);
