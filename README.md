@@ -200,7 +200,7 @@ start the connection again in the application.
 **`prompt=login` and `max_age`.** A client can ask for a fresh login with the authorization request
 parameters `prompt=login` (also inside a list such as `prompt=login consent`) or `max_age=<seconds>`
 (`max_age=0` equals `prompt=login`; a value that is not a number answers `invalid_request`). If the
-browser has a Dolibarr session that began before the request (or in the same second) and, for `max_age`, is older
+browser has a Dolibarr session that began before the request (also in the same second, told apart by the microsecond) and, for `max_age`, is older
 than that, the consent page ends it the same way as the link above and returns to the same request, so the person logs in
 again before seeing the consent. A session younger than `max_age`, or a login made after the request,
 is used as it is. The login made for the request is never asked for again: the consent page returns to the

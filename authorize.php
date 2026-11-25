@@ -88,6 +88,7 @@ $packedReq = array(
 if ($forceLogin || $maxAge !== '') {
 	// Time of this request: a login at or after it counts as the fresh login the client asked for.
 	$packedReq['iat'] = dol_now();
+	$packedReq['iat_us'] = round(microtime(true), 6);
 	if ($forceLogin) {
 		$packedReq['login'] = 1;
 	} else {

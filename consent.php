@@ -34,17 +34,16 @@ $sendBack = function ($params) use ($req) {
 };
 
 // prompt=login / max_age of the authorization request (see authorize.php): a session that began before the request
-// (this browser session's login time, restoauth_session_login_time(), at or before "iat") and is not recent enough
-// is ended, and the browser comes back to this same request, marked "forced" (restoauth_restart_consent). The
-// comparison is "at or before" because a login in the same clock second as the request cannot be told apart by
-// time; it does not matter, since the login made for this request always comes back with the marker, and a marked
-// request is never forced again: no loop, also if a login path does not update the login time. Sessions that
-// cannot be ended (auth mode http / forceuser) are left alone.
+// (this browser session's login time, see restoauth_session_older_than_request(): microseconds, so a session that
+// was there first is older also in the same second, and a login made after the request is not) and is not recent
+// enough is ended, and the browser comes back to this same request, marked "forced" (restoauth_restart_consent).
+// A marked request is never forced again: no loop, also if a login path does not update the login time. Sessions
+// that cannot be ended (auth mode http / forceuser) are left alone.
 if ((!empty($req['login']) || isset($req['max_age'])) && empty($req['forced'])) {
 	$loginAt = restoauth_session_login_time();
 	$iat = isset($req['iat']) ? (int) $req['iat'] : 0;
 	$stale = !empty($req['login']) || ($iat - $loginAt) > (int) $req['max_age'];
-	if ($loginAt <= $iat && $stale) {
+	if ($stale && restoauth_session_older_than_request($req)) {
 		restoauth_restart_consent($db, $req, 'consent page, '.(!empty($req['login']) ? 'prompt=login' : 'max_age'));
 	}
 }

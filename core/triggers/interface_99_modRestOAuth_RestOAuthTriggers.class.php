@@ -40,6 +40,7 @@ class InterfaceRestOAuthTriggers extends DolibarrTriggers
 			// A login begins this browser session: remember when (see restoauth_session_login_time()).
 			if (session_status() === PHP_SESSION_ACTIVE) {
 				$_SESSION['restoauth_login_at'] = dol_now();
+				$_SESSION['restoauth_login_at_us'] = round(microtime(true), 6);
 			}
 			return 0;
 		}

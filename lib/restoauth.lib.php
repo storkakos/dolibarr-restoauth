@@ -307,6 +307,26 @@ function restoauth_session_login_time()
 }
 
 /**
+ * Did this browser's session begin before the authorization request (so it is not the login the request led to)?
+ * With the microsecond times (the request's iat_us, the session's restoauth_login_at_us) the comparison is exact
+ * also within one clock second: a session that was there first is older, a login made after the request (no
+ * session when it was sent, password form in the same second) is not. Without them (a session from before the
+ * trigger, a request without iat_us) the whole seconds are compared and the same second counts as older, so a
+ * request is never wrongly answered by an old session; the marker "forced" ends any resulting extra login.
+ *
+ * @param array<string,mixed> $req Unpacked request
+ * @return bool
+ */
+function restoauth_session_older_than_request($req)
+{
+	$iat = isset($req['iat']) ? (int) $req['iat'] : 0;
+	if (session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['restoauth_login_at_us']) && !empty($req['iat_us'])) {
+		return (float) $_SESSION['restoauth_login_at_us'] < (float) $req['iat_us'];
+	}
+	return restoauth_session_login_time() <= $iat;
+}
+
+/**
  * Ends the session for a consent request and sends the browser back to that request, as a marked one: with
  * prompt=login / max_age the request gets the marker "forced" (signed, expiry unchanged). A request with the
  * marker never forces a login again, so the next login (made for this request) is accepted whatever its time and
