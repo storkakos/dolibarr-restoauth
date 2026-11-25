@@ -115,9 +115,10 @@ RewriteRule ^/?\.well-known/(oauth-authorization-server|openid-configuration)/cu
 RewriteRule ^/?custom/restoauth/\.well-known/(oauth-authorization-server|openid-configuration)/?$ /custom/restoauth/metadata.php [L]
 ```
 
-nginx (in the `server` block that serves Dolibarr). Tested with nginx 1.30.5 in front of Dolibarr's
-Apache: the metadata answers at the server root and inside the issuer path, with the right issuer.
-The block is self-contained, so copy it as it is:
+nginx (in the `server` block that serves Dolibarr). Tested with nginx 1.30.5 in two setups: as a
+reverse proxy in front of Dolibarr's Apache, and serving Dolibarr itself with PHP-FPM. In both, the
+metadata answers at the server root and inside the issuer path, with the right issuer. The block is
+self-contained, so copy it as it is:
 
 <!-- test-stack nginx block: restoauth-discovery. dolibarr-mcp-server's test stack (its test-stack/nginx/build-conf.sh) builds its nginx configuration from the next code block. Keep this line directly above it. -->
 ```nginx
@@ -128,6 +129,17 @@ location ~ ^/custom/restoauth/\.well-known/(oauth-authorization-server|openid-co
     rewrite ^ /custom/restoauth/metadata.php last;
 }
 ```
+
+With PHP-FPM the block needs no change: the rewrite ends in `metadata.php`, and your normal PHP
+handler runs it. Around the block, the `server` block is the usual Dolibarr setup for nginx, and
+nginx does not read Dolibarr's `.htaccess` files. Two things in it matter for restoauth: the PHP
+handler must pass `PATH_INFO` (`fastcgi_split_path_info`), because the REST endpoints are
+`/api/index.php/restoauth/...`, and it must run only files that exist (`try_files
+$fastcgi_script_name =404`). The tested server block also denies `/conf/`, which holds Dolibarr's
+database password. restoauth ships no private files of its own: everything in the module folder is
+either PHP, which the handler runs and never shows, or public data (`rights_map.json`, the language
+files, the SQL files of the tables).
+<!-- csf02: written before the run (ticket csf02). The run must confirm each claim in the paragraph above and in the sentence before the nginx block: (1) all four discovery URLs and the direct metadata.php answer with the right issuer behind nginx 1.30.5 + PHP-FPM; (2) /api/index.php/restoauth/me reaches Dolibarr (401 without a token) only with PATH_INFO; (3) /conf/ is denied, PHP sources never show, rights_map.json/x.php is a 404; (4) the oauth and rights check groups pass. Afterwards add the PHP version of the run to the sentence, and delete this comment. If a claim fails, correct the paragraph. -->
 
 If Dolibarr does not live at the web root, put its path prefix in front of `/custom` in both the
 pattern and the target.
