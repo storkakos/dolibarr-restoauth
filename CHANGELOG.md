@@ -10,6 +10,9 @@ upload.
   request (and, for `max_age`, is older than that), the consent page ends it and the user logs in again.
   Without the parameters nothing changes. A login through Keycloak can still be a silent single sign-on.
   No new constants; no reactivation needed.
+- README: the nginx discovery rules are also tested with nginx serving Dolibarr through PHP-FPM, and
+  the nginx section says what the rest of the server block needs for restoauth (`PATH_INFO`,
+  files that exist, `/conf/` denied). Documentation only.
 - New endpoint `frontchannel-logout.php` for Keycloak's front-channel logout (README: "Front-channel
   logout (Keycloak)"). It ends the browser's Dolibarr session like Dolibarr's own Logout, without a
   redirect, never shows the login page and sets no cookie. Used instead of Dolibarr's
