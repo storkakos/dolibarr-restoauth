@@ -41,10 +41,16 @@ cleanup() {
 }
 
 echo "test-on-vm: run $RUN, folder $DIR"
-"${SSH[@]}" "test ! -e $DIR" || {
+# ssh exits 255 when it cannot connect or log in; only exit 1 comes from the remote test itself.
+check=0
+"${SSH[@]}" "test ! -e $DIR" || check=$?
+if [ "$check" -eq 255 ]; then
+  echo "test-on-vm: cannot reach the VM over SSH (${VM_HOST:-root@192.168.178.25}), see the ssh error above" >&2
+  exit 255
+elif [ "$check" -ne 0 ]; then
   echo "test-on-vm: $DIR already exists on the VM (another run with RUN=$RUN?), pick another RUN" >&2
   exit 2
-}
+fi
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM

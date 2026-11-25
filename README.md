@@ -22,12 +22,14 @@ have to be created or copied, and **no Dolibarr core code is changed**.
 3. [Configure Dolibarr](#configure-dolibarr)
 4. [Rewrite rules for discovery](#rewrite-rules-for-discovery)
 5. [Endpoints](#endpoints)
-6. [Lifetimes](#lifetimes)
-7. [How the REST API accepts the token (Dolibarr 23)](#how-the-rest-api-accepts-the-token-dolibarr-23)
-8. [Tables](#tables)
-9. [Security notes](#security-notes)
-10. [Licence](#licence)
-11. [Development](#development)
+6. [Consent page](#consent-page)
+7. [Front-channel logout (Keycloak)](#front-channel-logout-keycloak)
+8. [Lifetimes](#lifetimes)
+9. [How the REST API accepts the token (Dolibarr 23)](#how-the-rest-api-accepts-the-token-dolibarr-23)
+10. [Tables](#tables)
+11. [Security notes](#security-notes)
+12. [Licence](#licence)
+13. [Development](#development)
 
 ## Prerequisites
 
@@ -113,8 +115,11 @@ RewriteRule ^/?\.well-known/(oauth-authorization-server|openid-configuration)/cu
 RewriteRule ^/?custom/restoauth/\.well-known/(oauth-authorization-server|openid-configuration)/?$ /custom/restoauth/metadata.php [L]
 ```
 
-nginx (in the `server` block that serves Dolibarr):
+nginx (in the `server` block that serves Dolibarr). Tested with nginx 1.30.5 in front of Dolibarr's
+Apache: the metadata answers at the server root and inside the issuer path, with the right issuer.
+The block is self-contained, so copy it as it is:
 
+<!-- test-stack nginx block: restoauth-discovery. dolibarr-mcp-server's test stack (its test-stack/nginx/build-conf.sh) builds its nginx configuration from the next code block. Keep this line directly above it. -->
 ```nginx
 location ~ ^/\.well-known/(oauth-authorization-server|openid-configuration)/custom/restoauth/?$ {
     rewrite ^ /custom/restoauth/metadata.php last;
@@ -134,12 +139,13 @@ Issuer: `<dolibarr>/custom/restoauth`
 | Address | Purpose |
 | --- | --- |
 | `metadata.php`, `/.well-known/oauth-authorization-server/custom/restoauth` | Authorization server metadata (RFC 8414) |
-| `authorize.php` | Authorization endpoint (`response_type=code` only, PKCE S256 required, `resource` per RFC 8707) |
-| `consent.php` | Consent page behind the normal Dolibarr login; lists the rights the assistant will act with |
+| `authorize.php` | Authorization endpoint (`response_type=code` only, PKCE S256 required, `resource` per RFC 8707; `prompt=login` and `max_age` force a new login, see [Consent page](#consent-page)) |
+| `consent.php` | Consent page behind the normal Dolibarr login; lists the rights the assistant will act with and offers to log out and use another account, see [Consent page](#consent-page) |
 | `token.php` | Grants `authorization_code` and `refresh_token`; client authentication `none`, `client_secret_post`, `client_secret_basic` |
 | `register.php` | Dynamic client registration (RFC 7591), redirect URIs from the allowlist only |
 | `revoke.php` | Token revocation (RFC 7009); ends the whole connection |
 | `connected.php` | User card tab **Connected applications**: list and end one's own connections |
+| `frontchannel-logout.php` | Front-channel logout URL for Keycloak: ends the browser's Dolibarr session, see [below](#front-channel-logout-keycloak) |
 | `/api/index.php/restoauth/me` | REST: user, active modules, current rights, token expiry and the rights rules from `rights_map.json` |
 | `/api/index.php/restoauth/endpoints` | REST: readable REST paths of all active API classes |
 
@@ -149,6 +155,88 @@ second one exists because Dolibarr's Swagger explorer does not run the module's 
 `rights_map.json` lists which Dolibarr rights a REST path needs where the default rule (first path
 segment = module, `GET` → `lire`/`read`) does not apply. It was read from the `api_*.class.php`
 files of Dolibarr 23.0.3.
+
+## Consent page
+
+`consent.php` runs behind the normal Dolibarr login and takes the Dolibarr session the browser already
+has. It names the application, the host it returns to, the resource (MCP server) and the account:
+**User** `<full name> (<login>)`, below it since when that account is logged in and the
+authentication mode (for example `openid_connect`), then the rights the application will get.
+
+Next to the user, the link **Not <name>? Log out and use another account** is for a second person in
+the same browser who finds someone else's session. It ends the Dolibarr session the way Dolibarr's own
+Logout does (trigger `USER_LOGOUT`, hooks `afterLogout`, the PHP session is destroyed) and sends the
+browser back to the same consent page for the same request. Dolibarr then shows its login page, and
+after the login the consent page shows the new account. The link carries the page's CSRF token; it is
+not shown for the authentication modes `http` and `forceuser`, whose sessions Dolibarr's Logout does
+not end either. It also deletes the cookie `DOL_rollback_url_*`, so that Dolibarr's `openid_connect`
+login returns to the consent page and not to an older page.
+
+The request behind the page (`req`) is valid for `RESTOAUTH_CONSENT_REQUEST_LIFETIME` (see
+[Lifetimes](#lifetimes)), including the new login. If it has expired, the page says so and asks to
+start the connection again in the application.
+
+**`prompt=login` and `max_age`.** A client can ask for a fresh login with the authorization request
+parameters `prompt=login` (also inside a list such as `prompt=login consent`) or `max_age=<seconds>`
+(`max_age=0` equals `prompt=login`; a value that is not a number answers `invalid_request`). If the
+browser has a Dolibarr session that began before the request and, for `max_age`, is older than that, the
+consent page ends it the same way as the link above and returns to the same request, so the person logs in
+again before seeing the consent. A session younger than `max_age`, or a login made after the request,
+is used as it is. Without these parameters nothing changes. The login time is the user's last login
+date in Dolibarr, so it is the Dolibarr login, not the identity provider's. In the modes `http` and
+`forceuser` the session cannot be ended and the request goes on. With an identity provider such as
+Keycloak the new Dolibarr login can still be a silent single sign-on (see Limit below). The discovery
+metadata does not list these parameters (RFC 8414 has no field for them).
+
+Limit: with a login through an identity provider such as Keycloak, the link ends only the Dolibarr
+session. If the provider's session in this browser still belongs to the previous person, the provider
+logs them in again without a password and the consent page names them again. Then that person has to
+log out of the provider first (for example by logging out of the MCP client's chat, which with
+[front-channel logout](#front-channel-logout-keycloak) also ends the Dolibarr session).
+
+## Front-channel logout (Keycloak)
+
+When users log in through Keycloak (`openid_connect`), a logout elsewhere, for example in the MCP
+client's chat, ends the Keycloak session but not the Dolibarr session in the same browser. The next
+person who connects the assistant in that browser would then see the consent page for the previous
+user's account. Keycloak's **front-channel logout** closes this: on every Keycloak logout, Keycloak's
+logout page loads the URL of each client of the session in an iframe.
+
+Set it on the Keycloak client that Dolibarr's `openid_connect` login uses (Clients → the Dolibarr
+client → Settings → Logout settings):
+
+| Setting | Value |
+| --- | --- |
+| Front channel logout | On |
+| Front-channel logout URL | `<dolibarr>/custom/restoauth/frontchannel-logout.php`, e.g. `https://erp.example.com/custom/restoauth/frontchannel-logout.php` |
+| Backchannel logout URL | empty (Dolibarr 23 has no back-channel logout) |
+
+What the endpoint does:
+
+- With a Dolibarr session in the browser, it ends that session the way Dolibarr's own Logout does
+  (trigger `USER_LOGOUT`, hooks `afterLogout`, the PHP session is destroyed), without a redirect. The
+  next Dolibarr page shows the login page.
+- Without a session (after Dolibarr's own Logout, or a timed-out session), it does nothing.
+- Either way it answers `200` with an empty body and `Cache-Control: no-store`, and sets **no
+  cookie**. It needs no CSRF token and ignores Keycloak's `iss` and `sid` parameters.
+
+Why not Dolibarr's `user/logout.php?noredirect=1`: without a session, that page shows Dolibarr's login
+page inside the iframe, and the login page stores itself in the cookie `DOL_rollback_url_*` as the
+place to return to after the next login (for an hour, if the cookie is not set yet). The next Keycloak
+login then ends on the logout page and is logged out at once. `frontchannel-logout.php` never shows
+the login page.
+
+Limits (they come from front-channel logout, not from restoauth):
+
+- The iframe only carries Dolibarr's session cookie (`SameSite=Lax`) if Dolibarr and Keycloak are on
+  the same site (registrable domain), e.g. `erp.example.com` and `sso.example.com`. Across sites,
+  browsers send no cookie and the session stays.
+- Only a Dolibarr session opened through Keycloak belongs to the Keycloak session. A session opened
+  with Dolibarr's own login form is not ended by a Keycloak logout.
+- It only runs when the logout goes through Keycloak (the client must call Keycloak's end-session
+  endpoint) and the browser loads Keycloak's logout page.
+- Like Dolibarr's `user/logout.php`, any page can end a user's Dolibarr session by sending the browser
+  to this URL. That only logs the user out.
 
 ## Lifetimes
 
@@ -244,6 +332,8 @@ lint's exit code and cleans up. Run it from Git Bash; see
 ```sh
 bash scripts/test-on-vm.sh
 ```
+
+When several agents work at once, only the `vm-runner` session runs this; ticket agents queue a request instead (see [Only `vm-runner` uses the VM](docs/agents/test-vm.md#only-vm-runner-uses-the-vm)).
 
 Build the release ZIP from a tag. The script checks that the tag `vX.Y.Z` matches
 `$this->version` in `core/modules/modRestOAuth.class.php` and writes

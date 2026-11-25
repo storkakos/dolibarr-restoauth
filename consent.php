@@ -6,11 +6,18 @@ require __DIR__.'/lib/bootstrap.inc.php';
 $langs->loadLangs(array('restoauth@restoauth', 'users', 'admin'));
 
 $packed = isset($_REQUEST['req']) && is_string($_REQUEST['req']) ? $_REQUEST['req'] : '';
-$req = restoauth_unpack_request($packed);
+$expired = false;
+$req = restoauth_unpack_request($packed, $expired);
 $client = $req ? restoauth_get_client($db, $req['client_id']) : null;
 if (!isModEnabled('restoauth') || !$req || !$client || !in_array($req['redirect_uri'], $client->redirect_uris, true)) {
 	llxHeader('', $langs->trans('RestOAuthConsentTitle'));
-	print '<div class="error">'.$langs->trans('RestOAuthRequestInvalid').'</div>';
+	print load_fiche_titre($langs->trans('RestOAuthConsentTitle'), '', 'technic');
+	if ($expired && isModEnabled('restoauth')) {
+		$minutes = (int) ceil(restoauth_lifetime('RESTOAUTH_CONSENT_REQUEST_LIFETIME') / 60);
+		print '<div class="warning">'.$langs->trans('RestOAuthRequestExpired', $minutes).'</div>';
+	} else {
+		print '<div class="error">'.$langs->trans('RestOAuthRequestInvalid').'</div>';
+	}
 	llxFooter();
 	exit;
 }
@@ -26,8 +33,37 @@ $sendBack = function ($params) use ($req) {
 	exit;
 };
 
+// prompt=login / max_age of the authorization request (see authorize.php): a session that is older than the request
+// (login time before "iat") and is not recent enough is ended, and the browser comes back to this same request.
+// The login time is the user's datelastlogin, which Dolibarr sets at every new login (password form and
+// openid_connect alike). After the new login it is >= iat, so the request passes and there is no loop. Sessions
+// that cannot be ended (auth mode http / forceuser) are left alone.
+if (!empty($req['login']) || isset($req['max_age'])) {
+	$loginAt = (int) $user->datelastlogin;
+	$iat = isset($req['iat']) ? (int) $req['iat'] : 0;
+	$stale = !empty($req['login']) || (dol_now() - $loginAt) > (int) $req['max_age'];
+	if ($loginAt < $iat && $stale && restoauth_end_session($db, 'consent page, '.(!empty($req['login']) ? 'prompt=login' : 'max_age'))) {
+		restoauth_forget_login_return();
+		header('Cache-Control: no-store');
+		header('Location: '.restoauth_issuer().'/consent.php?req='.$packed, true, 302);
+		exit;
+	}
+}
+
 $mayConnect = restoauth_user_may_connect($user);
 $action = GETPOST('restoauth_action', 'aZ09');
+
+// "Not <name>? Log out and use another account": end the Dolibarr session and come back to the same request,
+// so that the next person logs in as themselves. The link carries the page's token, so another site cannot
+// log the user out through it (Dolibarr's own Logout does not check one).
+if ($action === 'switch' && GETPOST('token', 'alpha') !== '' && GETPOST('token', 'alpha') === currentToken()) {
+	if (restoauth_end_session($db, 'consent page, other account')) {
+		restoauth_forget_login_return();
+	}
+	header('Cache-Control: no-store');
+	header('Location: '.restoauth_issuer().'/consent.php?req='.$packed, true, 302);
+	exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'deny') {
 	dol_syslog('restoauth: consent denied by '.$user->login.' for client '.$client->client_id, LOG_NOTICE);
@@ -64,7 +100,23 @@ print '<tr><td>'.$langs->trans('RestOAuthReturnsTo').'</td><td>'.dol_escape_html
 if ($req['resource'] !== '') {
 	print '<tr><td>'.$langs->trans('RestOAuthResource').'</td><td>'.dol_escape_htmltag($req['resource']).'</td></tr>';
 }
-print '<tr><td>'.$langs->trans('User').'</td><td>'.dol_escape_htmltag($user->getFullName($langs).' ('.$user->login.')').'</td></tr>';
+$fullName = trim($user->getFullName($langs));
+print '<tr><td>'.$langs->trans('User').'</td><td>'.dol_escape_htmltag(($fullName !== '' ? $fullName : $user->login).' ('.$user->login.')');
+if (restoauth_session_can_end()) {
+	$switchUrl = restoauth_issuer().'/consent.php?req='.$packed.'&restoauth_action=switch&token='.newToken();
+	print ' &nbsp; <a class="restoauth-switch" href="'.dol_escape_htmltag($switchUrl).'">'.dol_escape_htmltag($langs->transnoentities('RestOAuthNotYou', $fullName !== '' ? $fullName : $user->login)).'</a>';
+}
+$sessionInfo = array();
+if (!empty($user->datelastlogin)) {
+	$sessionInfo[] = $langs->transnoentities('RestOAuthLoggedInSince', dol_print_date($user->datelastlogin, 'dayhour', 'tzuser'));
+}
+if (!empty($_SESSION['dol_authmode'])) {
+	$sessionInfo[] = $langs->transnoentities('RestOAuthAuthMode', (string) $_SESSION['dol_authmode']);
+}
+if ($sessionInfo) {
+	print '<br><span class="opacitymedium">'.dol_escape_htmltag(implode(', ', $sessionInfo)).'</span>';
+}
+print '</td></tr>';
 print '</table><br>';
 
 if (!$mayConnect) {

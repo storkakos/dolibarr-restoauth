@@ -197,11 +197,13 @@ function restoauth_pack_request($req)
 }
 
 /**
- * @param string $packed Wert aus restoauth_pack_request
+ * @param string    $packed  Wert aus restoauth_pack_request
+ * @param bool|null $expired Out: true if the request is genuine (signature valid) but expired
  * @return array<string,mixed>|null
  */
-function restoauth_unpack_request($packed)
+function restoauth_unpack_request($packed, &$expired = null)
 {
+	$expired = false;
 	if (!preg_match('/^([0-9a-f]+)\.([0-9a-f]{64})$/', (string) $packed, $m)) {
 		return null;
 	}
@@ -210,10 +212,94 @@ function restoauth_unpack_request($packed)
 		return null;
 	}
 	$req = json_decode($payload, true);
-	if (!is_array($req) || empty($req['exp']) || $req['exp'] < dol_now()) {
+	if (!is_array($req) || empty($req['exp'])) {
+		return null;
+	}
+	if ($req['exp'] < dol_now()) {
+		$expired = true;
 		return null;
 	}
 	return $req;
+}
+
+/**
+ * Can restoauth end this browser's Dolibarr session? Not without a session, and not in the authentication
+ * modes http and forceuser: Dolibarr's own Logout (user/logout.php) refuses those too, because the next
+ * request would log the same user in again at once.
+ *
+ * @return bool
+ */
+function restoauth_session_can_end()
+{
+	if (session_status() !== PHP_SESSION_ACTIVE || empty($_SESSION['dol_login'])) {
+		return false;
+	}
+	$authmode = empty($_SESSION['dol_authmode']) ? '' : (string) $_SESSION['dol_authmode'];
+	return !in_array($authmode, array('forceuser', 'http'), true);
+}
+
+/**
+ * Ends this browser's Dolibarr session the way Dolibarr 23's user/logout.php does: trigger USER_LOGOUT, hooks
+ * afterLogout in the context logout, unset dol_login/dol_entity/urlfrom, session_destroy(). No redirect, no
+ * output, no cookie: the caller decides what the browser gets. Works with and without NOLOGIN (with NOLOGIN,
+ * main.inc.php has not loaded the session's user; it is loaded here for the trigger and the hooks).
+ *
+ * Used by frontchannel-logout.php and by the "Not <name>?" link of consent.php.
+ *
+ * @param DoliDB $db  Database
+ * @param string $why Caller, for the log (e.g. "front-channel logout")
+ * @return bool True if a session was ended, false if there was none or it cannot be ended (see restoauth_session_can_end)
+ */
+function restoauth_end_session($db, $why)
+{
+	global $user, $hookmanager;
+
+	if (!restoauth_session_can_end()) {
+		return false;
+	}
+	$login = (string) $_SESSION['dol_login'];
+	$entity = empty($_SESSION['dol_entity']) ? 0 : (int) $_SESSION['dol_entity'];
+	$u = $user;
+	if (!is_object($u) || empty($u->id) || $u->login !== $login) {
+		$u = new User($db);
+		if ($u->fetch(0, $login, '', 1, ($entity > 0 ? $entity : -1)) <= 0) {
+			dol_syslog('restoauth: '.$why.', user '.$login.' of the session not found', LOG_WARNING);
+		}
+	}
+
+	if ($u->id > 0) {
+		if ($u->call_trigger('USER_LOGOUT', $u) < 0) {
+			dol_syslog('restoauth: '.$why.', trigger USER_LOGOUT failed for '.$login, LOG_WARNING);
+		}
+		if (is_object($hookmanager)) {
+			$action = '';
+			$hookmanager->initHooks(array('logout'));
+			if ($hookmanager->executeHooks('afterLogout', array(), $u, $action) < 0) {
+				dol_syslog('restoauth: '.$why.', hook afterLogout failed for '.$login, LOG_WARNING);
+			}
+		}
+	}
+
+	dol_syslog('restoauth: '.$why.' of '.$login.', end of session '.session_id(), LOG_NOTICE);
+	unset($_SESSION['dol_login'], $_SESSION['dol_entity'], $_SESSION['urlfrom']);
+	session_destroy();
+	return true;
+}
+
+/**
+ * Deletes the cookies DOL_rollback_url_* of Dolibarr's login page. The login page stores the URL that showed it
+ * there (only if the cookie is not set yet), and Dolibarr's openid_connect login returns to that URL. Deleting
+ * it makes the next login page store the current URL, so the login returns there.
+ *
+ * @return void
+ */
+function restoauth_forget_login_return()
+{
+	foreach (array_keys($_COOKIE) as $name) {
+		if (preg_match('/^DOL_rollback_url_[A-Za-z0-9_]*$/', (string) $name)) {
+			header('Set-Cookie: '.$name.'=deleted; Expires=Thu, 01 Jan 1970 00:00:01 GMT; Max-Age=0; Path=/; HttpOnly; SameSite=Lax', false);
+		}
+	}
 }
 
 /**
