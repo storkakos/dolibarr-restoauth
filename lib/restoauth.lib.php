@@ -287,6 +287,60 @@ function restoauth_end_session($db, $why)
 }
 
 /**
+ * Is this browser session one that Dolibarr created through the identity provider (authentication mode
+ * openid_connect)? Call before restoauth_end_session(), which destroys the session.
+ *
+ * @return bool
+ */
+function restoauth_session_is_openid_connect()
+{
+	return session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['dol_authmode'])
+		&& in_array('openid_connect', array_map('trim', explode(',', (string) $_SESSION['dol_authmode'])), true);
+}
+
+/**
+ * The identity provider's end_session endpoint (OIDC RP-initiated logout) without query: the constant
+ * RESTOAUTH_OIDC_END_SESSION_URL, else scheme, host, port and path of Dolibarr's
+ * MAIN_AUTHENTICATION_OIDC_LOGOUT_URL (Dolibarr appends its own parameters to that one, so its query is dropped).
+ *
+ * @return string URL, or '' if none is configured or it is not http(s)
+ */
+function restoauth_idp_end_session_endpoint()
+{
+	foreach (array('RESTOAUTH_OIDC_END_SESSION_URL', 'MAIN_AUTHENTICATION_OIDC_LOGOUT_URL') as $name) {
+		$raw = trim(getDolGlobalString($name));
+		if ($raw === '') {
+			continue;
+		}
+		$p = parse_url($raw);
+		if (!is_array($p) || empty($p['host']) || empty($p['scheme']) || !in_array(strtolower($p['scheme']), array('http', 'https'), true)) {
+			continue;
+		}
+		return strtolower($p['scheme']).'://'.$p['host'].(isset($p['port']) ? ':'.(int) $p['port'] : '').(isset($p['path']) ? $p['path'] : '');
+	}
+	return '';
+}
+
+/**
+ * URL that ends the identity provider's session through RP-initiated logout and then returns the browser to
+ * $returnUrl: <end_session_endpoint>?client_id=<Dolibarr's client>&post_logout_redirect_uri=<$returnUrl>. The
+ * return target is a parameter of its own, never "state". Without id_token_hint the provider may ask the person
+ * to confirm the logout once. $returnUrl must be allowed under "Valid post logout redirect URIs" of the client.
+ *
+ * @param string $returnUrl Where the provider sends the browser afterwards
+ * @return string URL, or '' if the endpoint or the client id (MAIN_AUTHENTICATION_OIDC_CLIENT_ID) is not known
+ */
+function restoauth_idp_end_session_url($returnUrl)
+{
+	$endpoint = restoauth_idp_end_session_endpoint();
+	$clientId = trim(getDolGlobalString('MAIN_AUTHENTICATION_OIDC_CLIENT_ID'));
+	if ($endpoint === '' || $clientId === '') {
+		return '';
+	}
+	return $endpoint.'?'.http_build_query(array('client_id' => $clientId, 'post_logout_redirect_uri' => $returnUrl), '', '&', PHP_QUERY_RFC3986);
+}
+
+/**
  * Deletes the cookies DOL_rollback_url_* of Dolibarr's login page. The login page stores the URL that showed it
  * there (only if the cookie is not set yet), and Dolibarr's openid_connect login returns to that URL. Deleting
  * it makes the next login page store the current URL, so the login returns there.

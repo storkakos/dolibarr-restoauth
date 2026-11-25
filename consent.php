@@ -56,12 +56,27 @@ $action = GETPOST('restoauth_action', 'aZ09');
 // "Not <name>? Log out and use another account": end the Dolibarr session and come back to the same request,
 // so that the next person logs in as themselves. The link carries the page's token, so another site cannot
 // log the user out through it (Dolibarr's own Logout does not check one).
+// With a login through the identity provider (openid_connect) the provider's session is ended too, by its
+// RP-initiated logout; the provider sends the browser back to this same request. Otherwise its SSO session
+// would log the previous person in again without a password. The return target is a parameter of its own,
+// not "state". Without a known end_session endpoint the behaviour is the plain one and the page shows a hint.
 if ($action === 'switch' && GETPOST('token', 'alpha') !== '' && GETPOST('token', 'alpha') === currentToken()) {
-	if (restoauth_end_session($db, 'consent page, other account')) {
+	$returnUrl = restoauth_issuer().'/consent.php?req='.$packed;
+	$goTo = $returnUrl;
+	if (restoauth_session_is_openid_connect()) {
+		$idpUrl = restoauth_idp_end_session_url($returnUrl);
+		if ($idpUrl !== '') {
+			$goTo = $idpUrl;
+		}
+	}
+	if (restoauth_end_session($db, 'consent page, other account'.($goTo !== $returnUrl ? ' and identity provider' : ''))) {
 		restoauth_forget_login_return();
+		// A session that could not be ended (see restoauth_session_can_end) never reaches the provider's logout.
+	} else {
+		$goTo = $returnUrl;
 	}
 	header('Cache-Control: no-store');
-	header('Location: '.restoauth_issuer().'/consent.php?req='.$packed, true, 302);
+	header('Location: '.$goTo, true, 302);
 	exit;
 }
 
@@ -105,6 +120,9 @@ print '<tr><td>'.$langs->trans('User').'</td><td>'.dol_escape_htmltag(($fullName
 if (restoauth_session_can_end()) {
 	$switchUrl = restoauth_issuer().'/consent.php?req='.$packed.'&restoauth_action=switch&token='.newToken();
 	print ' &nbsp; <a class="restoauth-switch" href="'.dol_escape_htmltag($switchUrl).'">'.dol_escape_htmltag($langs->transnoentities('RestOAuthNotYou', $fullName !== '' ? $fullName : $user->login)).'</a>';
+	if (restoauth_session_is_openid_connect() && restoauth_idp_end_session_url('') === '') {
+		print '<br><span class="opacitymedium">'.dol_escape_htmltag($langs->transnoentities('RestOAuthNotYouIdpHint')).'</span>';
+	}
 }
 $sessionInfo = array();
 if (!empty($user->datelastlogin)) {

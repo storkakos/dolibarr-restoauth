@@ -6,6 +6,12 @@ upload.
 
 ## Unreleased
 
+- The consent page's "Not <name>?" link also ends the identity provider's session when the Dolibarr session came
+  from `openid_connect`: it sends the browser through the provider's RP-initiated logout
+  (`client_id`, `post_logout_redirect_uri` = the same consent request) and back. The endpoint is the new optional
+  constant `RESTOAUTH_OIDC_END_SESSION_URL` or taken from `MAIN_AUTHENTICATION_OIDC_LOGOUT_URL`; without one the
+  page shows a hint to log out of the provider first. Keycloak needs `<issuer>/consent.php*` under "Valid post
+  logout redirect URIs". No reactivation needed.
 - `authorize.php` honours `prompt=login` and `max_age`: if the browser's Dolibarr session began before the
   request (and, for `max_age`, is older than that), the consent page ends it and the user logs in again.
   Without the parameters nothing changes. A login through Keycloak can still be a silent single sign-on.

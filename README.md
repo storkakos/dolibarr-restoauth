@@ -77,6 +77,8 @@ module once afterwards.
    - **Allow loopback redirects** (`http://localhost`, `127.0.0.1`, `[::1]`): only for local tests.
    - **Issuer**: leave empty to use the module URL (`<dolibarr>/custom/restoauth`). Set it only if
      Dolibarr is reached under a different public URL, for example behind a reverse proxy.
+   - **Identity provider end_session URL** (optional): only for the login through an identity provider; see
+     [Consent page](#consent-page).
    - Token, code, consent request and connection lifetimes (see [Lifetimes](#lifetimes)).
 3. **Grant the connect right.** Give the users or groups that may use the assistant the right
    **"Connect applications (AI assistant) via OAuth with own rights"** (REST-OAuth module).
@@ -185,14 +187,32 @@ again before seeing the consent. A session younger than `max_age`, or a login ma
 is used as it is. Without these parameters nothing changes. The login time is the user's last login
 date in Dolibarr, so it is the Dolibarr login, not the identity provider's. In the modes `http` and
 `forceuser` the session cannot be ended and the request goes on. With an identity provider such as
-Keycloak the new Dolibarr login can still be a silent single sign-on (see Limit below). The discovery
+Keycloak the new Dolibarr login can still be a silent single sign-on (the provider's session is ended only by the link, see above). The discovery
 metadata does not list these parameters (RFC 8414 has no field for them).
 
-Limit: with a login through an identity provider such as Keycloak, the link ends only the Dolibarr
-session. If the provider's session in this browser still belongs to the previous person, the provider
-logs them in again without a password and the consent page names them again. Then that person has to
-log out of the provider first (for example by logging out of the MCP client's chat, which with
-[front-channel logout](#front-channel-logout-keycloak) also ends the Dolibarr session).
+**Login through an identity provider (`openid_connect`).** If the session was created by Dolibarr's
+`openid_connect` login, the link also ends the identity provider's session. After ending the Dolibarr session it
+sends the browser through the provider's RP-initiated logout,
+`<end_session_endpoint>?client_id=<Dolibarr's client>&post_logout_redirect_uri=<issuer>/consent.php?req=...`
+(the return target is its own parameter, never `state`). The provider may ask once "Do you want to log out?"
+(restoauth has no `id_token_hint`), then returns to the same consent request, where Dolibarr shows its login
+page and the next person logs in with a password. Without this the provider's SSO session would log the
+previous person in again without asking. With the password form (authentication mode `dolibarr`) there is no
+provider round trip.
+
+- The end_session endpoint is the constant `RESTOAUTH_OIDC_END_SESSION_URL`, or, if that is empty, scheme, host
+  and path of Dolibarr's `MAIN_AUTHENTICATION_OIDC_LOGOUT_URL` (its query is dropped). The client id is
+  Dolibarr's `MAIN_AUTHENTICATION_OIDC_CLIENT_ID`. Set the constant on the module's setup page.
+- In Keycloak, the client that Dolibarr's login uses needs `<issuer>/consent.php*` (for example
+  `https://erp.example.com/custom/restoauth/consent.php*`) under **Valid post logout redirect URIs**. Without it
+  Keycloak answers the logout with "Invalid redirect uri" and keeps the session.
+- This ends **all** of that person's single sign-on sessions at the provider in this browser, not only Dolibarr's:
+  other applications of the same realm (for example the MCP client's chat) lose their login there too. With
+  [front-channel logout](#front-channel-logout-keycloak) set up, the provider also ends Dolibarr's own session.
+- If neither an end_session endpoint nor a client id is known, the link keeps ending only the Dolibarr session and
+  the page shows a hint to log out of the identity provider first (for example by logging out of the MCP client's
+  chat, which with front-channel logout also ends the Dolibarr session). `prompt=login` and `max_age` end only the
+  Dolibarr session in every case.
 
 ## Front-channel logout (Keycloak)
 
