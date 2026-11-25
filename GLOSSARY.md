@@ -9,7 +9,7 @@ The signed authorization request that the authorization endpoint hands to the co
 _Avoid_: req, packed request
 
 **Forced request**:
-A consent request for which a fresh login was already forced once; it never forces another login.
+A consent request for which a fresh login was already forced; it lets through exactly the login made for it, once, and opened again later it counts as a new consent request.
 _Avoid_: marked URL, retry
 
 ## Login

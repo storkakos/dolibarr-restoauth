@@ -33,22 +33,6 @@ $sendBack = function ($params) use ($req) {
 	exit;
 };
 
-// prompt=login / max_age of the authorization request (see authorize.php): a session that began before the request
-// (this browser session's login time, see restoauth_session_older_than_request(): microseconds, so a session that
-// was there first is older also in the same second, and a login made after the request is not) and is not recent
-// enough is ended, and the browser comes back to this same request, marked "forced" (restoauth_restart_consent).
-// A marked request is never forced again: no loop, also if a login path does not update the login time. Sessions
-// that cannot be ended (auth mode http / forceuser) are left alone.
-if ((!empty($req['login']) || isset($req['max_age'])) && empty($req['forced'])) {
-	$loginAt = restoauth_session_login_time();
-	$iat = isset($req['iat']) ? (int) $req['iat'] : 0;
-	$stale = !empty($req['login']) || ($iat - $loginAt) > (int) $req['max_age'];
-	if ($stale && restoauth_session_older_than_request($req)) {
-		restoauth_restart_consent($db, $req, 'consent page, '.(!empty($req['login']) ? 'prompt=login' : 'max_age'));
-	}
-}
-
-$mayConnect = restoauth_user_may_connect($user);
 $action = GETPOST('restoauth_action', 'aZ09');
 
 // "Not <name>? Log out and use another account": end the Dolibarr session and come back to the same request,
@@ -69,11 +53,33 @@ if ($action === 'switch' && GETPOST('restoauth_switch', 'alpha') !== '' && hash_
 	exit;
 }
 
+// prompt=login / max_age of the authorization request (see authorize.php): a session that began before the request
+// (this browser session's login time, see restoauth_session_older_than_request(): microseconds, so a session that
+// was there first is older also in the same second, and a login made after the request is not) and is not recent
+// enough is ended, and the browser comes back to this same request as a forced request (restoauth_restart_consent).
+// A forced request lets through exactly the login made for it, once (restoauth_forced_request_admits): no loop,
+// also if a login path does not update the login time. Opened again later (for example from the browser's
+// history), it counts as an unmarked request sent now, so an older session is ended again. Sessions that cannot
+// be ended (auth mode http / forceuser) are left alone. The "Not <name>?" link above ends the session anyway.
+if ((!empty($req['login']) || isset($req['max_age'])) && !restoauth_forced_request_admits($req)) {
+	$check = empty($req['forced']) ? $req : restoauth_reopened_request($req);
+	$loginAt = restoauth_session_login_time();
+	$iat = isset($check['iat']) ? (int) $check['iat'] : 0;
+	$stale = !empty($check['login']) || ($iat - $loginAt) > (int) $check['max_age'];
+	if ($stale && restoauth_session_older_than_request($check)) {
+		restoauth_restart_consent($db, $check, 'consent page, '.(!empty($check['login']) ? 'prompt=login' : 'max_age').(empty($req['forced']) ? '' : ', forced request opened again'));
+	}
+}
+
+$mayConnect = restoauth_user_may_connect($user);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'deny') {
+	restoauth_forced_request_used($req);
 	dol_syslog('restoauth: consent denied by '.$user->login.' for client '.$client->client_id, LOG_NOTICE);
 	$sendBack(array('error' => 'access_denied', 'error_description' => 'The user denied the request'));
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'allow') {
+	restoauth_forced_request_used($req);
 	if (!$mayConnect) {
 		$sendBack(array('error' => 'access_denied', 'error_description' => 'User is not allowed to connect applications'));
 	}

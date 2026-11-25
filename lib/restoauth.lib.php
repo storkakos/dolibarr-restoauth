@@ -312,7 +312,7 @@ function restoauth_session_login_time()
  * also within one clock second: a session that was there first is older, a login made after the request (no
  * session when it was sent, password form in the same second) is not. Without them (a session from before the
  * trigger, a request without iat_us) the whole seconds are compared and the same second counts as older, so a
- * request is never wrongly answered by an old session; the marker "forced" ends any resulting extra login.
+ * request is never wrongly answered by an old session; a forced request ends any resulting extra login.
  *
  * @param array<string,mixed> $req Unpacked request
  * @return bool
@@ -327,10 +327,11 @@ function restoauth_session_older_than_request($req)
 }
 
 /**
- * Ends the session for a consent request and sends the browser back to that request, as a marked one: with
- * prompt=login / max_age the request gets the marker "forced" (signed, expiry unchanged). A request with the
- * marker never forces a login again, so the next login (made for this request) is accepted whatever its time and
- * a login path that does not update the login time cannot cause a loop. Used for the forced login of
+ * Ends the session for a consent request and sends the browser back to that request, as a forced request: with
+ * prompt=login / max_age the request gets the marker "forced" (a fresh random value) and the time it was forced
+ * ("forced_at_us"), both signed, expiry unchanged. A forced request lets through exactly the login made for it,
+ * once (restoauth_forced_request_admits), so that login is accepted whatever its time and a login path that does
+ * not update the login time cannot cause a loop. Used for the forced login of
  * prompt=login / max_age and for the "Not <name>?" link, which can also go through the identity provider's
  * RP-initiated logout ($viaIdp, only for a session from openid_connect). Sets the cookie of the login return
  * to the request (or deletes it) and redirects; does not return then.
@@ -344,7 +345,8 @@ function restoauth_session_older_than_request($req)
 function restoauth_restart_consent($db, $req, $why, $viaIdp = false)
 {
 	if (!empty($req['login']) || isset($req['max_age'])) {
-		$req['forced'] = 1;
+		$req['forced'] = restoauth_random(12);
+		$req['forced_at_us'] = round(microtime(true), 6);
 	}
 	$packed = restoauth_pack_request($req, (int) $req['exp']);
 	$returnUrl = restoauth_consent_url($packed);
@@ -365,6 +367,90 @@ function restoauth_restart_consent($db, $req, $why, $viaIdp = false)
 	header('Cache-Control: no-store');
 	header('Location: '.$goTo, true, 302);
 	exit;
+}
+
+/**
+ * Key of a forced request in this session's list of forced requests already let through: the marker, the time it
+ * was forced, the expiry and the client, hashed (a request forced before the marker became random carries
+ * "forced" = 1).
+ *
+ * @param array<string,mixed> $req Unpacked forced request
+ * @return string
+ */
+function restoauth_forced_key($req)
+{
+	return substr(hash('sha256', 'forced|'.$req['forced'].'|'.(isset($req['forced_at_us']) ? $req['forced_at_us'] : '').'|'.$req['exp'].'|'.$req['client_id']), 0, 32);
+}
+
+/**
+ * Does this forced request let this session through? Only the login made for it, and only once:
+ *  - the first time the request reaches the consent page in a session, it lets the session through unless the
+ *    session began before the request was forced (its microsecond login time is older than "forced_at_us"). A
+ *    session without that time (a login path that does not update it) is let through, so there is no loop;
+ *  - from then on the session has used the request: the consent form of that page (POST) may still answer it once,
+ *    and anything else (the URL opened again, for example from the browser's history) is not let through. The
+ *    consent page then treats the request like an unmarked one sent now (restoauth_reopened_request).
+ * Records the visit in $_SESSION['restoauth_forced'] (entries are dropped once their request has expired).
+ *
+ * @param array<string,mixed> $req Unpacked request
+ * @return bool False also for a request that is not forced
+ */
+function restoauth_forced_request_admits($req)
+{
+	if (empty($req['forced']) || session_status() !== PHP_SESSION_ACTIVE) {
+		return false;
+	}
+	$now = dol_now();
+	$seen = isset($_SESSION['restoauth_forced']) && is_array($_SESSION['restoauth_forced']) ? $_SESSION['restoauth_forced'] : array();
+	foreach ($seen as $k => $v) {
+		if (!is_array($v) || empty($v['exp']) || $v['exp'] < $now) {
+			unset($seen[$k]);
+		}
+	}
+	$key = restoauth_forced_key($req);
+	$state = isset($seen[$key]['state']) ? (string) $seen[$key]['state'] : '';
+	$admit = false;
+	if ($state === '') {
+		$older = !empty($_SESSION['restoauth_login_at_us']) && !empty($req['forced_at_us'])
+			&& (float) $_SESSION['restoauth_login_at_us'] < (float) $req['forced_at_us'];
+		$admit = !$older;
+		if ($admit) {
+			$seen[$key] = array('state' => 'shown', 'exp' => (int) $req['exp']);
+		}
+	} elseif ($state === 'shown' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+		$admit = true;
+	}
+	$_SESSION['restoauth_forced'] = $seen;
+	return $admit;
+}
+
+/**
+ * Marks a forced request as answered in this session (consent given or denied): its form cannot answer it again.
+ *
+ * @param array<string,mixed> $req Unpacked request
+ * @return void
+ */
+function restoauth_forced_request_used($req)
+{
+	if (!empty($req['forced']) && session_status() === PHP_SESSION_ACTIVE) {
+		$_SESSION['restoauth_forced'][restoauth_forced_key($req)] = array('state' => 'used', 'exp' => (int) $req['exp']);
+	}
+}
+
+/**
+ * A forced request that does not let this session through (anymore), as an unmarked request sent now: without
+ * the marker, with "iat" / "iat_us" set to now, so prompt=login ends a session that began before it and max_age
+ * is measured from now. Expiry, client and everything else stay.
+ *
+ * @param array<string,mixed> $req Unpacked forced request
+ * @return array<string,mixed>
+ */
+function restoauth_reopened_request($req)
+{
+	unset($req['forced'], $req['forced_at_us']);
+	$req['iat'] = dol_now();
+	$req['iat_us'] = round(microtime(true), 6);
+	return $req;
 }
 
 /**
