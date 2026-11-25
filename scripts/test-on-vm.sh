@@ -41,9 +41,11 @@ cleanup() {
 }
 
 echo "test-on-vm: run $RUN, folder $DIR"
-# ssh exits 255 when it cannot connect or log in; only exit 1 comes from the remote test itself.
+# One SSH call checks and creates the folder, so two runs with the same RUN cannot both pass the
+# check. ssh exits 255 when it cannot connect or log in; only exit 1 comes from the remote test.
+# The cleanup trap is set only after the folder is ours: exit 2 and exit 255 never remove anything.
 check=0
-"${SSH[@]}" "test ! -e $DIR" || check=$?
+"${SSH[@]}" "test ! -e $DIR && mkdir $DIR" || check=$?
 if [ "$check" -eq 255 ]; then
   echo "test-on-vm: cannot reach the VM over SSH (${VM_HOST:-root@192.168.178.25}), see the ssh error above" >&2
   exit 255
@@ -56,7 +58,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 git ls-files -z --cached --others --exclude-standard | tar --null -T - -cf - \
-  | "${SSH[@]}" "mkdir $DIR && tar -xf - -C $DIR"
+  | "${SSH[@]}" "tar -xf - -C $DIR"
 
 status=0
 "${SSH[@]}" "cd $DIR && LINT_CONTAINER=$CONTAINER bash scripts/lint-php.sh" || status=$?
