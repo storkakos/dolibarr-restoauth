@@ -176,7 +176,8 @@ files of Dolibarr 23.0.3.
 
 `consent.php` runs behind the normal Dolibarr login and takes the Dolibarr session the browser already
 has. It names the application, the host it returns to, the resource (MCP server) and the account:
-**User** `<full name> (<login>)`, below it since when that account is logged in and the
+**User** `<full name> (<login>)`, below it since when this browser session is logged in (the time of the login that began the
+session, not the user's last login on another device) and the
 authentication mode (for example `openid_connect`), then the rights the application will get.
 
 Next to the user, the link **Not <name>? Log out and use another account** is for a second person in
@@ -199,11 +200,16 @@ start the connection again in the application.
 **`prompt=login` and `max_age`.** A client can ask for a fresh login with the authorization request
 parameters `prompt=login` (also inside a list such as `prompt=login consent`) or `max_age=<seconds>`
 (`max_age=0` equals `prompt=login`; a value that is not a number answers `invalid_request`). If the
-browser has a Dolibarr session that began before the request and, for `max_age`, is older than that, the
-consent page ends it the same way as the link above and returns to the same request, so the person logs in
+browser has a Dolibarr session that began before the request (also in the same second, told apart by the microsecond) and, for `max_age`, is older
+than that, the consent page ends it the same way as the link above and returns to the same request, so the person logs in
 again before seeing the consent. A session younger than `max_age`, or a login made after the request,
-is used as it is. Without these parameters nothing changes. The login time is the user's last login
-date in Dolibarr, so it is the Dolibarr login, not the identity provider's. In the modes `http` and
+is used as it is. The login made for the request is never asked for again: the consent page returns to the
+request marked as "login already forced" (signed, same expiry), and a marked request is not forced a second
+time, so there is no loop, also if a login path does not update the login time. Without these parameters nothing changes. The login time is the one of this browser's Dolibarr
+session (stored in the PHP session by the module's `USER_LOGIN` trigger at every login), not the user's last login
+on any device, and it is the Dolibarr login, not the identity provider's. A cross-site link
+`authorize.php?...&prompt=login` (registered client, allowlisted redirect URI) therefore ends the Dolibarr session
+in the browser that opens it, as OIDC allows for `prompt=login`. In the modes `http` and
 `forceuser` the session cannot be ended and the request goes on. With an identity provider such as
 Keycloak the new Dolibarr login can still be a silent single sign-on (the provider's session is ended only by the link, see above). The discovery
 metadata does not list these parameters (RFC 8414 has no field for them).

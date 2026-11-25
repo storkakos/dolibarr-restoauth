@@ -6,6 +6,11 @@ upload.
 
 ## Unreleased
 
+- Fix: `prompt=login` and `max_age` no longer miss a request sent in the same second as the last login, and
+  they use this browser session's login time (stored by a new `USER_LOGIN` trigger in the PHP session), not the
+  user's last login on any device. The login made for the request is never asked for again (marker in the signed
+  request), so there is no loop. "Logged in since" on the consent page shows the same session time. No
+  reactivation needed; sessions that began before the update use the user's last login date until they end.
 - Fix: `max_age` is measured from the authorization request (`iat`), not from when the consent page loads, so
   waiting on the consent page no longer forces an extra login. The "Not <name>?" link carries its own token in
   the parameter `restoauth_switch` (bound to the session and user); Dolibarr's CSRF check drops a GET `token`
