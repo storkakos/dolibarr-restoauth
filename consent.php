@@ -1,6 +1,6 @@
 <?php
-/* restoauth - Zustimmungsseite. Laeuft hinter der normalen Dolibarr-Anmeldung (Formular oder Keycloak/openid_connect).
- * Nach "Erlauben" wird ein einmaliger Autorisierungscode (lifetime RESTOAUTH_CODE_LIFETIME, default 120 s) erzeugt und der Browser zum Client zurueckgeschickt. */
+/* restoauth - Consent page. Runs behind Dolibarr's normal login (form or Keycloak/openid_connect).
+ * After "Allow" a one-time authorization code (lifetime RESTOAUTH_CODE_LIFETIME, default 120 s) is created and the browser is sent back to the client. */
 require __DIR__.'/lib/bootstrap.inc.php';
 
 $langs->loadLangs(array('restoauth@restoauth', 'users', 'admin'));
@@ -33,22 +33,6 @@ $sendBack = function ($params) use ($req) {
 	exit;
 };
 
-// prompt=login / max_age of the authorization request (see authorize.php): a session that began before the request
-// (this browser session's login time, see restoauth_session_older_than_request(): microseconds, so a session that
-// was there first is older also in the same second, and a login made after the request is not) and is not recent
-// enough is ended, and the browser comes back to this same request, marked "forced" (restoauth_restart_consent).
-// A marked request is never forced again: no loop, also if a login path does not update the login time. Sessions
-// that cannot be ended (auth mode http / forceuser) are left alone.
-if ((!empty($req['login']) || isset($req['max_age'])) && empty($req['forced'])) {
-	$loginAt = restoauth_session_login_time();
-	$iat = isset($req['iat']) ? (int) $req['iat'] : 0;
-	$stale = !empty($req['login']) || ($iat - $loginAt) > (int) $req['max_age'];
-	if ($stale && restoauth_session_older_than_request($req)) {
-		restoauth_restart_consent($db, $req, 'consent page, '.(!empty($req['login']) ? 'prompt=login' : 'max_age'));
-	}
-}
-
-$mayConnect = restoauth_user_may_connect($user);
 $action = GETPOST('restoauth_action', 'aZ09');
 
 // "Not <name>? Log out and use another account": end the Dolibarr session and come back to the same request,
@@ -65,15 +49,37 @@ if ($action === 'switch' && GETPOST('restoauth_switch', 'alpha') !== '' && hash_
 	// provider's logout, the page just opens again.
 	restoauth_restart_consent($db, $req, 'consent page, other account', true);
 	header('Cache-Control: no-store');
-	header('Location: '.restoauth_issuer().'/consent.php?req='.$packed, true, 302);
+	header('Location: '.restoauth_consent_url($packed), true, 302);
 	exit;
 }
 
+// prompt=login / max_age of the authorization request (see authorize.php): a session that began before the request
+// (this browser session's login time, see restoauth_session_older_than_request(): microseconds, so a session that
+// was there first is older also in the same second, and a login made after the request is not) and is not recent
+// enough is ended, and the browser comes back to this same request as a forced request (restoauth_restart_consent).
+// A forced request lets through exactly the login made for it, once (restoauth_forced_request_admits): no loop,
+// also if a login path does not update the login time. Opened again later (for example from the browser's
+// history), it counts as an unmarked request sent now, so an older session is ended again. Sessions that cannot
+// be ended (auth mode http / forceuser) are left alone. The "Not <name>?" link above ends the session anyway.
+if ((!empty($req['login']) || isset($req['max_age'])) && !restoauth_forced_request_admits($req)) {
+	$check = empty($req['forced']) ? $req : restoauth_reopened_request($req);
+	$loginAt = restoauth_session_login_time();
+	$iat = isset($check['iat']) ? (int) $check['iat'] : 0;
+	$stale = !empty($check['login']) || ($iat - $loginAt) > (int) $check['max_age'];
+	if ($stale && restoauth_session_older_than_request($check)) {
+		restoauth_restart_consent($db, $check, 'consent page, '.(!empty($check['login']) ? 'prompt=login' : 'max_age').(empty($req['forced']) ? '' : ', forced request opened again'));
+	}
+}
+
+$mayConnect = restoauth_user_may_connect($user);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'deny') {
+	restoauth_forced_request_used($req);
 	dol_syslog('restoauth: consent denied by '.$user->login.' for client '.$client->client_id, LOG_NOTICE);
 	$sendBack(array('error' => 'access_denied', 'error_description' => 'The user denied the request'));
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'allow') {
+	restoauth_forced_request_used($req);
 	if (!$mayConnect) {
 		$sendBack(array('error' => 'access_denied', 'error_description' => 'User is not allowed to connect applications'));
 	}
@@ -92,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'allow') {
 	$sendBack(array('code' => $code));
 }
 
-// Anzeige
+// Page
 $redirectHost = parse_url($req['redirect_uri'], PHP_URL_HOST);
 llxHeader('', $langs->trans('RestOAuthConsentTitle'));
 print load_fiche_titre($langs->trans('RestOAuthConsentTitle'), '', 'technic');
@@ -107,9 +113,9 @@ if ($req['resource'] !== '') {
 $fullName = trim($user->getFullName($langs));
 print '<tr><td>'.$langs->trans('User').'</td><td>'.dol_escape_htmltag(($fullName !== '' ? $fullName : $user->login).' ('.$user->login.')');
 if (restoauth_session_can_end()) {
-	$switchUrl = restoauth_issuer().'/consent.php?req='.$packed.'&restoauth_action=switch&restoauth_switch='.restoauth_switch_token();
+	$switchUrl = restoauth_consent_url($packed).'&restoauth_action=switch&restoauth_switch='.restoauth_switch_token();
 	print ' &nbsp; <a class="restoauth-switch" href="'.dol_escape_htmltag($switchUrl).'">'.dol_escape_htmltag($langs->transnoentities('RestOAuthNotYou', $fullName !== '' ? $fullName : $user->login)).'</a>';
-	if (restoauth_session_is_openid_connect() && restoauth_idp_end_session_url('') === '') {
+	if (restoauth_session_is_openid_connect() && !restoauth_idp_logout_available()) {
 		print '<br><span class="opacitymedium">'.dol_escape_htmltag($langs->transnoentities('RestOAuthNotYouIdpHint')).'</span>';
 	}
 }

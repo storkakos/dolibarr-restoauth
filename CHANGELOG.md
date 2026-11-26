@@ -6,6 +6,18 @@ upload.
 
 ## Unreleased
 
+- Fix: before the identity provider's logout ("Not <name>?" link), the login return cookie `DOL_rollback_url_*`
+  now holds the consent page's path as Dolibarr builds it (with Dolibarr's own sub-path), not the path of
+  `RESTOAUTH_ISSUER`, which can be a public path a proxy rewrites. The cookie gets `Secure` also when Dolibarr is
+  set to force https behind a TLS proxy (as Dolibarr's own cookies). No reactivation needed.
+- Fix: a consent request for which `prompt=login` or `max_age` forced a fresh login lets through only the login
+  made for it, once. Opened again later in the same browser (for example from its history), it forces a login
+  again, as a new request would, instead of being answered by whatever session the browser has. No loop: the
+  login made for it is still accepted also if a login path does not update the session login time. No
+  reactivation needed.
+- Front-channel logout writes the login and authentication mode of a session it leaves alone to the log only as
+  plain characters. Code comments of the shared library are in English; small cleanups on the consent page.
+
 ## 0.3.0 - 2026-11-25
 
 Logout and fresh login through the identity provider: front-channel logout, the consent page's "Not <name>?"
@@ -19,8 +31,7 @@ link (also through the provider's logout), `prompt=login` and `max_age`, each wi
 - Fix: `prompt=login` and `max_age` no longer miss a request sent in the same second as the last login, and
   they use this browser session's login time (stored by a new `USER_LOGIN` trigger in the PHP session), not the
   user's last login on any device. The login made for the request is never asked for again (marker in the signed
-  request), so there is no loop. Known limit: until the request expires, the marked URL opened again in the same
-  browser is answered without another login (see README, `prompt=login` and `max_age`). "Logged in since" on the consent page shows the same session time. No
+  request), so there is no loop. "Logged in since" on the consent page shows the same session time. No
   reactivation needed; sessions that began before the update use the user's last login date until they end.
 - Fix: `max_age` is measured from the authorization request (`iat`), not from when the consent page loads, so
   waiting on the consent page no longer forces an extra login. The "Not <name>?" link carries its own token in

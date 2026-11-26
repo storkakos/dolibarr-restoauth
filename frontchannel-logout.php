@@ -47,8 +47,12 @@ if (isModEnabled('restoauth')) {
 	if (restoauth_session_is_openid_connect()) {
 		restoauth_end_session($db, 'front-channel logout');
 	} elseif (restoauth_session_can_end()) {
-		dol_syslog('restoauth: front-channel logout leaves the session of '.$_SESSION['dol_login'].' alone, authentication mode '
-			.(empty($_SESSION['dol_authmode']) ? '(none)' : $_SESSION['dol_authmode']).' is not openid_connect', LOG_INFO);
+		// Session values go into the log only as harmless characters (no line breaks or control characters).
+		$clean = function ($v) {
+			return substr(preg_replace('/[^A-Za-z0-9_.@,+-]/', '?', (string) $v), 0, 64);
+		};
+		dol_syslog('restoauth: front-channel logout leaves the session of '.$clean(isset($_SESSION['dol_login']) ? $_SESSION['dol_login'] : '').' alone, authentication mode '
+			.(empty($_SESSION['dol_authmode']) ? '(none)' : $clean($_SESSION['dol_authmode'])).' is not openid_connect', LOG_INFO);
 	}
 }
 restoauth_frontchannel_done();
