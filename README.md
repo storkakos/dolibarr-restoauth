@@ -392,7 +392,7 @@ the same tag always gives the same ZIP. Repo-only files (`AGENTS.md`, `docs/`, `
 out via `export-ignore` in `.gitattributes`.
 
 ```sh
-bash scripts/build-release-zip.sh v0.3.0
+bash scripts/build-release-zip.sh v0.3.1
 ```
 
 Release steps: set the new version in the module descriptor, add a `CHANGELOG.md` entry, commit,

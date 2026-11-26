@@ -6,6 +6,13 @@ upload.
 
 ## Unreleased
 
+## 0.3.1 - 2026-11-26
+
+Consent follow-ups: the login return cookie before the identity provider's logout, and a forced login request
+that lets through only the login made for it, once (removes the known limit of 0.3.0).
+
+- Upgrading from 0.3.0: install the ZIP over the old version. No reactivation needed; clients, connections and
+  settings are kept, and no new constant is required.
 - Fix: before the identity provider's logout ("Not <name>?" link), the login return cookie `DOL_rollback_url_*`
   now holds the consent page's path as Dolibarr builds it (with Dolibarr's own sub-path), not the path of
   `RESTOAUTH_ISSUER`, which can be a public path a proxy rewrites. The cookie gets `Secure` also when Dolibarr is
